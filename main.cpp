@@ -104,11 +104,11 @@ int main(int, char**)
 #endif
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-//    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-//    {
-//        style.WindowRounding = 0.0f;
-//        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-//    }
+    // if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    // {
+    //     style.WindowRounding = 0.0f;
+    //     style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    // }
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -140,6 +140,26 @@ int main(int, char**)
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     static bool show_menu = true;
     static bool extra_windows[16] = { false };
+    static bool reset_layout = false;
+    
+
+    // Load custom state
+    {
+        FILE* f = fopen("tomewell_state.ini", "r");
+        if (f)
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                int v;
+                if (fscanf(f, "%d", &v) == 1)
+                {
+                    extra_windows[i] = (v != 0);
+                }
+            }
+            fclose(f);
+        }
+    }
+
 
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -196,6 +216,16 @@ int main(int, char**)
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Settings"))
+            {
+                if (ImGui::MenuItem("Reset Layout"))
+                {
+                    memset(extra_windows, 0, sizeof(extra_windows));
+                    remove("tomewell_state.ini");
+                    reset_layout = true;
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMainMenuBar();
         }
 
@@ -221,6 +251,14 @@ int main(int, char**)
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
         ImGui::DockSpace(dockspace_id);
         ImGui::End();
+
+        // Reset layout if requested
+        if (reset_layout)
+        {
+            reset_layout = false;
+            remove("imgui.ini");
+            ImGui::ClearIniSettings();
+        }
 
         // Set up initial split
         ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspace_id);
@@ -277,13 +315,13 @@ int main(int, char**)
         // Update and Render additional Platform Windows
         // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
         //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
-//        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-//        {
-//            GLFWwindow* backup_current_context = glfwGetCurrentContext();
-//            ImGui::UpdatePlatformWindows();
-//            ImGui::RenderPlatformWindowsDefault();
-//            glfwMakeContextCurrent(backup_current_context);
-//        }
+        // if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        // {
+        //     GLFWwindow* backup_current_context = glfwGetCurrentContext();
+        //     ImGui::UpdatePlatformWindows();
+        //     ImGui::RenderPlatformWindowsDefault();
+        //     glfwMakeContextCurrent(backup_current_context);
+        // }
 
         glfwSwapBuffers(window);
     }
@@ -298,6 +336,20 @@ int main(int, char**)
 
     glfwDestroyWindow(window);
     glfwTerminate();
+
+
+    // Store custom state
+    {
+        FILE* f = fopen("tomewell_state.ini", "w");
+        if (f)
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                fprintf(f, "%d\n", extra_windows[i] ? 1: 0);
+            }
+            fclose(f);
+        }
+    }
 
     return 0;
 }
