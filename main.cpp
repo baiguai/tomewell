@@ -145,6 +145,7 @@ int main(int, char**)
     static bool extra_windows[16] = { false };
     static bool reset_layout = false;
     static const std::string nt_marker = "Matthew,1,1,";
+    static std::string def_translat = "asv";
     
 
     // Load custom state
