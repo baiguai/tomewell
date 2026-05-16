@@ -12,6 +12,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
+#include <string>
 #define GL_SILENCE_DEPRECATION
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <GLES2/gl2.h>
@@ -136,11 +137,14 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
     //IM_ASSERT(font != nullptr);
 
-    // Our state
+
+
+    // Our state  !@!
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     static bool show_menu = true;
     static bool extra_windows[16] = { false };
     static bool reset_layout = false;
+    static const std::string nt_marker = "Matthew,1,1,";
     
 
     // Load custom state
