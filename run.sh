@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+./build.sh
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXE="$SCRIPT_DIR/tomewell"
 
