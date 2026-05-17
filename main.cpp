@@ -137,6 +137,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 
 
+static std::string g_highlight_query;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
@@ -148,6 +149,42 @@ static const std::vector<TestamentInfo>& get_translation(const std::string& name
         it = s_trans_cache.emplace(name, std::move(data)).first;
     }
     return it->second;
+}
+
+static void render_highlighted_verse(int num, const std::string& text, const std::string& query)
+{
+    if (query.empty())
+    {
+        ImGui::TextWrapped("%d. %s", num, text.c_str());
+        return;
+    }
+
+    std::string lower_text, lower_query;
+    for (auto& c : text) lower_text += (char)tolower(c);
+    for (auto& c : query) lower_query += (char)tolower(c);
+
+    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
+    ImGui::Text("%d. ", num);
+    ImGui::SameLine(0, 0);
+
+    size_t start = 0;
+    size_t pos = 0;
+    while ((pos = lower_text.find(lower_query, start)) != std::string::npos)
+    {
+        if (pos > start)
+        {
+            ImGui::TextUnformatted(text.c_str() + start, text.c_str() + pos);
+            ImGui::SameLine(0, 0);
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f));
+        ImGui::TextUnformatted(text.c_str() + pos, text.c_str() + pos + query.size());
+        ImGui::PopStyleColor();
+        ImGui::SameLine(0, 0);
+        start = pos + query.size();
+    }
+    if (start < text.size())
+        ImGui::TextUnformatted(text.c_str() + start, text.c_str() + text.size());
+    ImGui::PopTextWrapPos();
 }
 
 static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
@@ -181,7 +218,7 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                         ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
                         for (auto& v : c.verses)
                             if (verse_num == -1 || v.num == verse_num)
-                                ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
+                                render_highlighted_verse(v.num, v.text, g_highlight_query);
                         ImGui::EndChild();
                         return;
                     }
@@ -575,37 +612,47 @@ int main(int, char**)
                     show_search = false;
                     search_buf[0] = '\0';
                     search_results.clear();
+                    g_highlight_query.clear();
+                    show_search = false;
                 }
 
                 if (ImGui::IsWindowAppearing())
-                    ImGui::SetKeyboardFocusHere();
-
-                bool do_search = false;
-                if (ImGui::InputText("Query", search_buf, sizeof(search_buf), ImGuiInputTextFlags_EnterReturnsTrue))
-                    do_search = true;
-                ImGui::SameLine();
-                if (ImGui::Button("Find")) do_search = true;
-
-                if (do_search && strlen(search_buf) > 0)
                 {
+                    ImGui::SetKeyboardFocusHere();
+                    search_buf[0] = '\0';
                     search_results.clear();
-                    const auto& data = get_translation(def_translat);
-                    std::string query = search_buf;
-                    for (auto& q : query) q = (char)tolower(q);
-                    for (auto& t : data)
-                        for (auto& b : t.books)
-                            for (auto& c : b.chapters)
-                                for (auto& v : c.verses)
-                                {
-                                    std::string lower = v.text;
-                                    for (auto& ch : lower) ch = (char)tolower(ch);
-                                    if (lower.find(query) != std::string::npos)
-                                    {
-                                        std::string snippet = v.text;
-                                        if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
-                                        search_results.push_back({b.id, b.name, c.num, v.num, snippet});
-                                    }
-                                }
+                }
+
+                ImGui::InputText("Query", search_buf, sizeof(search_buf));
+                {
+                    static std::string prev_query;
+                    std::string cur = search_buf;
+                    if (cur != prev_query)
+                    {
+                        prev_query = cur;
+                        search_results.clear();
+                        if (!cur.empty())
+                        {
+                            g_highlight_query = cur;
+                            const auto& data = get_translation(def_translat);
+                            std::string query = cur;
+                            for (auto& q : query) q = (char)tolower(q);
+                            for (auto& t : data)
+                                for (auto& b : t.books)
+                                    for (auto& c : b.chapters)
+                                        for (auto& v : c.verses)
+                                        {
+                                            std::string lower = v.text;
+                                            for (auto& ch : lower) ch = (char)tolower(ch);
+                                            if (lower.find(query) != std::string::npos)
+                                            {
+                                                std::string snippet = v.text;
+                                                if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                                search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                            }
+                                        }
+                        }
+                    }
                 }
 
                 if (!search_results.empty())
@@ -635,13 +682,15 @@ int main(int, char**)
                     }
                     ImGui::EndChild();
                 }
-                else if (strlen(search_buf) > 0 && do_search)
+                else if (strlen(search_buf) > 0 && search_results.empty())
                 {
                     ImGui::TextUnformatted("No results found.");
                 }
             }
             ImGui::End();
         }
+        if (!show_search)
+            g_highlight_query.clear();
 
         {
             ImGui::Begin("Treeview");
