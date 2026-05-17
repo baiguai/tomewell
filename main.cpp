@@ -570,6 +570,16 @@ int main(int, char**)
             ImGui::SetNextWindowSize(ImVec2(560, 440), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Search Bible", &show_search))
             {
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    show_search = false;
+                    search_buf[0] = '\0';
+                    search_results.clear();
+                }
+
+                if (ImGui::IsWindowAppearing())
+                    ImGui::SetKeyboardFocusHere();
+
                 bool do_search = false;
                 if (ImGui::InputText("Query", search_buf, sizeof(search_buf), ImGuiInputTextFlags_EnterReturnsTrue))
                     do_search = true;
