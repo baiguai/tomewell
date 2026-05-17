@@ -7,17 +7,7 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
-#include "imgui.h"
-#include "imgui_internal.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include <stdio.h>
-#include <string>
-#define GL_SILENCE_DEPRECATION
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <GLES2/gl2.h>
-#endif
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include "main.h"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -35,6 +25,92 @@ static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
+
+
+
+// Bible loading methods
+std::vector<TestamentInfo> load_translation(const std::string& path)
+{
+    std::vector<TestamentInfo> result;
+    std::ifstream file(path);
+    if (!file.is_open()) return result;
+
+    std::string line;
+    int last_book_id = -1;
+    int last_chapter = -1;
+    BookInfo* book = nullptr;
+    ChapterInfo* chapter = nullptr;
+
+    while (std::getline(file, line))
+    {
+        if (line.empty()) continue;
+
+        std::vector<std::string> fields;
+        std::string f;
+        bool in_q = false;
+        for (size_t i = 0; i < line.size(); i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                if (in_q && i + 1 < line.size() && line[i + 1] == '"')
+                {
+                    f += '"'; i++;
+                }
+                else
+                {
+                    in_q = !in_q;
+                }
+            }
+            else if (c == ',' && !in_q)
+            {
+                fields.push_back(f);
+                f.clear();
+            }
+            else
+            {
+                f += c;
+            }
+        }
+        fields.push_back(f);
+        if (fields.size() < 6) continue;
+
+        int t = std::stoi(fields[0]);       // testament
+        int b = std::stoi(fields[1]);       // book id
+        int c = std::stoi(fields[2]);       // chapter
+        int v = std::stoi(fields[3]);       // verse
+        std::string bn = fields[4];         // book name
+        std::string txt = fields[5];        // verse text
+
+        while ((int)result.size() < t)
+        {
+            result.push_back({t, t == 1 ? "Old Testament" : "New Testament", {}});
+        }
+
+        // new book
+        if (b != last_book_id)
+        {
+            result[t - 1].books.push_back({b, bn, {}});
+            book = &result[t - 1].books.back();
+            last_chapter = -1;
+            last_book_id = b;
+        }
+
+        // new chapter
+        if (c != last_chapter)
+        {
+            book->chapters.push_back({c, {}});
+            chapter = &book->chapters.back();
+            last_chapter = c;
+        }
+        chapter->verses.push_back({v, txt});
+    }
+
+    return result;
+}
+
+
+
 
 // Main code
 int main(int, char**)
@@ -144,8 +220,12 @@ int main(int, char**)
     static bool show_menu = true;
     static bool extra_windows[16] = { false };
     static bool reset_layout = false;
-    static const std::string nt_marker = "Matthew,1,1,";
     static std::string def_translat = "asv";
+
+
+    // General variables
+    static std::vector<TestamentInfo> bible = load_translation("translations/done/asv.csv");
+
     
 
     // Load custom state
@@ -303,7 +383,35 @@ int main(int, char**)
         {
             ImGui::Begin("Treeview");
 
-            ImGui::Text("This is a treeview window.");               // Display some text (you can use a format strings too)
+            for (auto& t : bible)
+            {
+                if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    for (auto& b : t.books)
+                    {
+                        if (ImGui::TreeNodeEx(b.name.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
+                        {
+                            for (auto& c : b.chapters)
+                            {
+                                char ch_label[32];
+                                snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                if (ImGui::TreeNodeEx(ch_label, ImGuiTreeNodeFlags_SpanAvailWidth))
+                                {
+                                    for (auto& v : c.verses)
+                                    {
+                                        char v_label[32];
+                                        snprintf(v_label, sizeof(v_label), "Verse %d", v.num);
+                                        ImGui::TreeNodeEx(v_label, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
+                                    }
+                                    ImGui::TreePop();
+                                }
+                            }
+                            ImGui::TreePop();
+                        }
+                    }
+                    ImGui::TreePop();
+                }
+            }
 
             ImGui::End();
         }
