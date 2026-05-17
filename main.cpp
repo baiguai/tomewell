@@ -26,6 +26,30 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
+std::string exe_dir()
+{
+    static std::string cached;
+    if (!cached.empty()) return cached;
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH];
+    GetModuleFileNameW(NULL, buf, MAX_PATH);
+    wchar_t* sep = wcsrchr(buf, L'\\');
+    if (sep) *sep = L'\0';
+    char mb[MAX_PATH];
+    wcstombs(mb, buf, MAX_PATH);
+    cached = mb;
+#else
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len != -1)
+    {
+        buf[len] = '\0';
+        cached = dirname(buf);
+    }
+#endif
+    return cached;
+}
+
 
 
 // Bible loading methods
@@ -120,7 +144,7 @@ static const std::vector<TestamentInfo>& get_translation(const std::string& name
     auto it = s_trans_cache.find(name);
     if (it == s_trans_cache.end())
     {
-        auto data = load_translation("translations/done/" + name + ".csv");
+        auto data = load_translation(exe_dir() + "/translations/done/" + name + ".csv");
         it = s_trans_cache.emplace(name, std::move(data)).first;
     }
     return it->second;
@@ -279,7 +303,7 @@ int main(int, char**)
     if (!g_translations_scanned)
     {
         g_translations_scanned = true;
-        DIR* dir = opendir("translations/done");
+        DIR* dir = opendir((exe_dir() + "/translations/done").c_str());
         if (dir)
         {
             struct dirent* entry;
@@ -312,7 +336,8 @@ int main(int, char**)
 
     // Load custom state
     {
-        FILE* f = fopen("tomewell_state.ini", "r");
+        std::string state_path = exe_dir() + "/tomewell_state.ini";
+        FILE* f = fopen(state_path.c_str(), "r");
         if (f)
         {
             char buf[256];
@@ -405,7 +430,7 @@ int main(int, char**)
                     nav_book = 1;
                     nav_chapter = 1;
                     nav_verse = -1;
-                    remove("tomewell_state.ini");
+                    remove((exe_dir() + "/tomewell_state.ini").c_str());
                     reset_layout = true;
                 }
                 ImGui::EndMenu();
@@ -610,7 +635,7 @@ int main(int, char**)
 
     // Store custom state
     {
-        FILE* f = fopen("tomewell_state.ini", "w");
+        FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
         if (f)
         {
             fprintf(f, "%s\n", def_translat.c_str());

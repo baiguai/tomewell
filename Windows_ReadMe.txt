@@ -6,8 +6,8 @@ Two options to get tomewell.exe running on Windows:
 
 OPTION 1: Grab the pre-built .exe from the Linux build
 -------------------------------------------------------------------------------
-Run build_windows.sh on Linux to produce tomewell.exe, then copy it to your
-Windows machine.  The .exe is statically linked so you only need:
+Run build_windows.sh on Linux to produce bin/windows/tomewell.exe, then copy
+it to your Windows machine.  The .exe is statically linked so you only need:
 
   - A GPU with OpenGL 3.0+ drivers (built-in on any modern Windows)
 

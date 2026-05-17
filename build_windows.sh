@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="$SCRIPT_DIR/deps"
 IMGUI_DIR="$DEPS_DIR/imgui"
 GLFW_DIR="$DEPS_DIR/glfw-mingw"
+BIN_DIR="$SCRIPT_DIR/bin/windows"
 EXE="tomewell.exe"
 
 RED='\033[0;31m'
@@ -58,6 +59,8 @@ else
 fi
 
 echo -e "${YELLOW}==> Compiling...${NC}"
+mkdir -p "$BIN_DIR"
+FULL_EXE="$BIN_DIR/$EXE"
 OBJS=()
 for src in "${SOURCES[@]}"; do
     base="$(basename "$src")"
@@ -68,10 +71,14 @@ for src in "${SOURCES[@]}"; do
 done
 
 echo -e "${YELLOW}==> Linking...${NC}"
-$CXX $CXXFLAGS_STATIC -o "$EXE" "${OBJS[@]}" $LIBS
+$CXX $CXXFLAGS_STATIC -o "$FULL_EXE" "${OBJS[@]}" $LIBS
 
 echo -e "${YELLOW}==> Cleaning up .o files...${NC}"
 rm -f "${OBJS[@]}"
 
-echo -e "${GREEN}==> Done: $SCRIPT_DIR/$EXE${NC}"
-echo -e "${GREEN}    (copy the .exe to a Windows machine to run)${NC}"
+echo -e "${YELLOW}==> Copying translations...${NC}"
+rm -rf "$BIN_DIR/translations"
+rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/" "$BIN_DIR/translations/"
+
+echo -e "${GREEN}==> Done: $FULL_EXE${NC}"
+echo -e "${GREEN}    (copy the whole bin/windows/ folder to a Windows machine to run)${NC}"

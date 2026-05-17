@@ -13,6 +13,12 @@
 #include <map>
 #include <cstring>
 #include <dirent.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <libgen.h>
+#endif
 #define GL_SILENCE_DEPRECATION
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <GLES2/gl2.h>
@@ -25,5 +31,6 @@ struct BookInfo { int id; std::string name; std::vector<ChapterInfo> chapters; }
 struct TestamentInfo { int num; std::string label; std::vector<BookInfo> books; };
 
 std::vector<TestamentInfo> load_translation(const std::string& path);
+std::string exe_dir();
 
 #endif

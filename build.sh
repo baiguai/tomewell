@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="$SCRIPT_DIR/deps"
 IMGUI_DIR="$DEPS_DIR/imgui"
+BIN_DIR="$SCRIPT_DIR/bin/linux"
 EXE="tomewell"
 
 RED='\033[0;31m'
@@ -35,7 +36,13 @@ else
 fi
 
 echo -e "${YELLOW}==> Building...${NC}"
-make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$EXE" clean 2>/dev/null || true
-make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$EXE" -j"$(nproc)"
+mkdir -p "$BIN_DIR"
+FULL_EXE="$BIN_DIR/$EXE"
+make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$FULL_EXE" clean 2>/dev/null || true
+make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$FULL_EXE" -j"$(nproc)"
 
-echo -e "${GREEN}==> Build complete: $SCRIPT_DIR/$EXE${NC}"
+echo -e "${YELLOW}==> Copying translations...${NC}"
+rm -rf "$BIN_DIR/translations"
+rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/" "$BIN_DIR/translations/"
+
+echo -e "${GREEN}==> Build complete: $FULL_EXE${NC}"
