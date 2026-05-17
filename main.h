@@ -30,6 +30,8 @@ struct ChapterInfo { int num; std::vector<VerseInfo> verses; };
 struct BookInfo { int id; std::string name; std::vector<ChapterInfo> chapters; };
 struct TestamentInfo { int num; std::string label; std::vector<BookInfo> books; };
 
+struct SearchResult { int book_id; std::string book_name; int chapter; int verse; std::string snippet; };
+
 std::vector<TestamentInfo> load_translation(const std::string& path);
 std::string exe_dir();
 

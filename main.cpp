@@ -323,6 +323,11 @@ int main(int, char**)
     // Default translation for main window
     static std::string def_translat = "asv";
 
+    // Search state
+    static bool show_search = false;
+    static char search_buf[256] = "";
+    static std::vector<SearchResult> search_results;
+
     // Extra windows
     struct ExtraWin { bool open = false; std::string translation = "asv"; };
     static ExtraWin translation_windows[16];
@@ -411,6 +416,10 @@ int main(int, char**)
         {
             show_menu = !show_menu;
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_F))
+        {
+            show_search = !show_search;
+        }
 
         // Create the main menu
         if (show_menu && ImGui::BeginMainMenuBar())
@@ -427,6 +436,14 @@ int main(int, char**)
                 if (ImGui::MenuItem("Quit"))
                 {
                     glfwSetWindowShouldClose(window, true);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Search"))
+            {
+                if (ImGui::MenuItem("Search Bible"))
+                {
+                    show_search = true;
                 }
                 ImGui::EndMenu();
             }
@@ -546,6 +563,76 @@ int main(int, char**)
 
             ImGui::End();
         }
+
+        // Search window
+        if (show_search)
+        {
+            ImGui::SetNextWindowSize(ImVec2(560, 440), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Search Bible", &show_search))
+            {
+                bool do_search = false;
+                if (ImGui::InputText("Query", search_buf, sizeof(search_buf), ImGuiInputTextFlags_EnterReturnsTrue))
+                    do_search = true;
+                ImGui::SameLine();
+                if (ImGui::Button("Find")) do_search = true;
+
+                if (do_search && strlen(search_buf) > 0)
+                {
+                    search_results.clear();
+                    const auto& data = get_translation(def_translat);
+                    std::string query = search_buf;
+                    for (auto& q : query) q = (char)tolower(q);
+                    for (auto& t : data)
+                        for (auto& b : t.books)
+                            for (auto& c : b.chapters)
+                                for (auto& v : c.verses)
+                                {
+                                    std::string lower = v.text;
+                                    for (auto& ch : lower) ch = (char)tolower(ch);
+                                    if (lower.find(query) != std::string::npos)
+                                    {
+                                        std::string snippet = v.text;
+                                        if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                        search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                    }
+                                }
+                }
+
+                if (!search_results.empty())
+                {
+                    ImGui::Separator();
+                    ImGui::Text("%zu results", search_results.size());
+                    ImGui::BeginChild("##results", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                    for (size_t i = 0; i < search_results.size(); i++)
+                    {
+                        auto& r = search_results[i];
+                        char label[256];
+                        snprintf(label, sizeof(label), "%s %d:%d  %s", r.book_name.c_str(), r.chapter, r.verse, r.snippet.c_str());
+                        ImGui::PushID((int)i);
+                        if (ImGui::Selectable(label))
+                        {
+                            nav_book = r.book_id;
+                            nav_chapter = r.chapter;
+                            nav_verse = r.verse;
+                        }
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                        {
+                            search_buf[0] = '\0';
+                            search_results.clear();
+                            show_search = false;
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::EndChild();
+                }
+                else if (strlen(search_buf) > 0 && do_search)
+                {
+                    ImGui::TextUnformatted("No results found.");
+                }
+            }
+            ImGui::End();
+        }
+
         {
             ImGui::Begin("Treeview");
 
