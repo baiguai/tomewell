@@ -139,6 +139,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 static std::string g_highlight_query;
 static bool g_tree_inited = false;
+static bool g_scroll_to_verse = false;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
@@ -689,6 +690,7 @@ int main(int, char**)
                         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                         {
                             g_tree_inited = false;
+                            g_scroll_to_verse = true;
                             search_buf[0] = '\0';
                             search_results.clear();
                             show_search = false;
@@ -761,6 +763,11 @@ int main(int, char**)
                                             v_flags |= ImGuiTreeNodeFlags_Selected;
                                         ImGui::TreeNodeEx(v_label, v_flags);
                                         ImGui::PopID();
+                                        if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse && g_scroll_to_verse)
+                                        {
+                                            ImGui::ScrollToItem();
+                                            g_scroll_to_verse = false;
+                                        }
                                         if (ImGui::IsItemClicked())
                                         {
                                             nav_book = b.id;
