@@ -7,17 +7,7 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
-#include "imgui.h"
-#include "imgui_internal.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include <stdio.h>
-#include <string>
-#define GL_SILENCE_DEPRECATION
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <GLES2/gl2.h>
-#endif
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include "main.h"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -34,6 +24,145 @@
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
+
+
+
+// Bible loading methods
+std::vector<TestamentInfo> load_translation(const std::string& path)
+{
+    std::vector<TestamentInfo> result;
+    std::ifstream file(path);
+    if (!file.is_open()) return result;
+
+    std::string line;
+    int last_book_id = -1;
+    int last_chapter = -1;
+    BookInfo* book = nullptr;
+    ChapterInfo* chapter = nullptr;
+
+    while (std::getline(file, line))
+    {
+        if (line.empty()) continue;
+
+        std::vector<std::string> fields;
+        std::string f;
+        bool in_q = false;
+        for (size_t i = 0; i < line.size(); i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                if (in_q && i + 1 < line.size() && line[i + 1] == '"')
+                {
+                    f += '"'; i++;
+                }
+                else
+                {
+                    in_q = !in_q;
+                }
+            }
+            else if (c == ',' && !in_q)
+            {
+                fields.push_back(f);
+                f.clear();
+            }
+            else
+            {
+                f += c;
+            }
+        }
+        fields.push_back(f);
+        if (fields.size() < 6) continue;
+
+        int t = std::stoi(fields[0]);       // testament
+        int b = std::stoi(fields[1]);       // book id
+        int c = std::stoi(fields[2]);       // chapter
+        int v = std::stoi(fields[3]);       // verse
+        std::string bn = fields[4];         // book name
+        std::string txt = fields[5];        // verse text
+
+        while ((int)result.size() < t)
+        {
+            int idx = (int)result.size() + 1;
+            result.push_back({idx, idx == 1 ? "Old Testament" : "New Testament", {}});
+        }
+
+        // new book
+        if (b != last_book_id)
+        {
+            result[t - 1].books.push_back({b, bn, {}});
+            book = &result[t - 1].books.back();
+            last_chapter = -1;
+            last_book_id = b;
+        }
+
+        // new chapter
+        if (c != last_chapter)
+        {
+            book->chapters.push_back({c, {}});
+            chapter = &book->chapters.back();
+            last_chapter = c;
+        }
+        chapter->verses.push_back({v, txt});
+    }
+
+    return result;
+}
+
+
+
+
+static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
+
+static const std::vector<TestamentInfo>& get_translation(const std::string& name)
+{
+    auto it = s_trans_cache.find(name);
+    if (it == s_trans_cache.end())
+    {
+        auto data = load_translation("translations/done/" + name + ".csv");
+        it = s_trans_cache.emplace(name, std::move(data)).first;
+    }
+    return it->second;
+}
+
+static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
+{
+    for (auto& t : data)
+        for (auto& b : t.books)
+            if (b.id == book_id)
+            {
+                for (auto& c : b.chapters)
+                    if (c.num == chapter)
+                    {
+                        ImGui::Text("%s  -  Chapter %d", b.name.c_str(), chapter);
+                        ImGui::Separator();
+                        std::string passage;
+                        for (auto& v : c.verses)
+                            if (verse_num == -1 || v.num == verse_num)
+                            {
+                                char num_buf[16];
+                                snprintf(num_buf, sizeof(num_buf), "%d. ", v.num);
+                                passage += num_buf;
+                                passage += v.text;
+                                passage += "\n\n";
+                            }
+                        if (ImGui::Button("Copy"))
+                            ImGui::SetClipboardText(passage.c_str());
+                        ImGui::SameLine();
+                        if (verse_num == -1)
+                            ImGui::TextDisabled("%zu verses", c.verses.size());
+                        else
+                            ImGui::TextDisabled("Chapter %d : Verse %d", chapter, verse_num);
+                        ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
+                        for (auto& v : c.verses)
+                            if (verse_num == -1 || v.num == verse_num)
+                                ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
+                        ImGui::EndChild();
+                        return;
+                    }
+                return;
+            }
 }
 
 // Main code
@@ -142,9 +271,43 @@ int main(int, char**)
     // Our state  !@!
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     static bool show_menu = true;
-    static bool extra_windows[16] = { false };
     static bool reset_layout = false;
-    static const std::string nt_marker = "Matthew,1,1,";
+
+    // Scan available translations
+    static std::vector<std::string> g_translations;
+    static bool g_translations_scanned = false;
+    if (!g_translations_scanned)
+    {
+        g_translations_scanned = true;
+        DIR* dir = opendir("translations/done");
+        if (dir)
+        {
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != nullptr)
+            {
+                const char* name = entry->d_name;
+                const char* dot = strrchr(name, '.');
+                if (dot && strcmp(dot, ".csv") == 0)
+                    g_translations.push_back(std::string(name, dot - name));
+            }
+            closedir(dir);
+        }
+        if (g_translations.empty())
+            g_translations = {"acv", "asv", "louis_segond", "mkjv", "nasb", "net", "ylt"};
+    }
+
+    // Default translation for main window
+    static std::string def_translat = "asv";
+
+    // Extra windows
+    struct ExtraWin { bool open = false; std::string translation = "asv"; };
+    static ExtraWin translation_windows[16];
+
+    // Navigation state (driven by treeview)
+    static int nav_book = 1;
+    static int nav_chapter = 1;
+    static int nav_verse = -1;  // -1 means start from verse 1
+
     
 
     // Load custom state
@@ -152,12 +315,21 @@ int main(int, char**)
         FILE* f = fopen("tomewell_state.ini", "r");
         if (f)
         {
+            char buf[256];
+            if (fgets(buf, sizeof(buf), f))
+            {
+                buf[strcspn(buf, "\r\n")] = 0;
+                if (strlen(buf) > 0) def_translat = buf;
+            }
             for (int i = 0; i < 16; i++)
             {
-                int v;
-                if (fscanf(f, "%d", &v) == 1)
+                if (fgets(buf, sizeof(buf), f))
                 {
-                    extra_windows[i] = (v != 0);
+                    int open = 0;
+                    char trans[64] = "";
+                    sscanf(buf, "%d %63s", &open, trans);
+                    translation_windows[i].open = (open != 0);
+                    translation_windows[i].translation = (strlen(trans) > 0) ? trans : "asv";
                 }
             }
             fclose(f);
@@ -207,11 +379,11 @@ int main(int, char**)
         {
             if (ImGui::BeginMenu("File"))
             {
-                if (ImGui::MenuItem("New Window"))
+                if (ImGui::MenuItem("New Translation Window"))
                 {
                     for (int i = 0; i < 16; i++)
                     {
-                        if (!extra_windows[i]) { extra_windows[i] = true; break; }
+                        if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
                 if (ImGui::MenuItem("Quit"))
@@ -224,7 +396,15 @@ int main(int, char**)
             {
                 if (ImGui::MenuItem("Reset Layout"))
                 {
-                    memset(extra_windows, 0, sizeof(extra_windows));
+                    def_translat = "asv";
+                    for (int i = 0; i < 16; i++)
+                    {
+                        translation_windows[i].open = false;
+                        translation_windows[i].translation = "asv";
+                    }
+                    nav_book = 1;
+                    nav_chapter = 1;
+                    nav_verse = -1;
                     remove("tomewell_state.ini");
                     reset_layout = true;
                 }
@@ -283,26 +463,112 @@ int main(int, char**)
         // Show extra windows
         for (int i = 0; i < 16; i++)
         {
-            if (!extra_windows[i]) continue;
+            if (!translation_windows[i].open) continue;
             char name[64];
-            snprintf(name, sizeof(name), "Hello Dave##%d", i);
-            ImGui::Begin(name, &extra_windows[i]);
-            ImGui::Text("This is window #%d", i);
+            snprintf(name, sizeof(name), "Other Translation##%d", i);
+            ImGui::Begin(name, &translation_windows[i].open);
+
+            if (ImGui::BeginCombo("##trans", translation_windows[i].translation.c_str()))
+            {
+                for (auto& t : g_translations)
+                {
+                    bool sel = (t == translation_windows[i].translation);
+                    if (ImGui::Selectable(t.c_str(), sel))
+                        translation_windows[i].translation = t;
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("Window %d", i);
+
+            const auto& data = get_translation(translation_windows[i].translation);
+            render_passage(data, nav_book, nav_chapter, nav_verse);
+
             ImGui::End();
         }
 
-        // Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
         {
             ImGui::Begin("Main Translation");
 
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+            if (ImGui::BeginCombo("##trans", def_translat.c_str()))
+            {
+                for (auto& t : g_translations)
+                {
+                    bool sel = (t == def_translat);
+                    if (ImGui::Selectable(t.c_str(), sel))
+                        def_translat = t;
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            const auto& data = get_translation(def_translat);
+            render_passage(data, nav_book, nav_chapter, nav_verse);
 
             ImGui::End();
         }
         {
             ImGui::Begin("Treeview");
 
-            ImGui::Text("This is a treeview window.");               // Display some text (you can use a format strings too)
+            const auto& tree_data = get_translation(def_translat);
+            for (auto& t : tree_data)
+            {
+                if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    for (auto& b : t.books)
+                    {
+                        ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                        if (b.id == nav_book) b_flags |= ImGuiTreeNodeFlags_Selected;
+                        bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
+                        if (ImGui::IsItemClicked())
+                        {
+                            nav_book = b.id;
+                            nav_chapter = 1;
+                            nav_verse = -1;
+                        }
+                        if (b_open)
+                        {
+                            for (auto& c : b.chapters)
+                            {
+                                char ch_label[32];
+                                snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                if (b.id == nav_book && c.num == nav_chapter)
+                                    c_flags |= ImGuiTreeNodeFlags_Selected;
+                                bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
+                                if (ImGui::IsItemClicked())
+                                {
+                                    nav_book = b.id;
+                                    nav_chapter = c.num;
+                                    nav_verse = -1;
+                                }
+                                if (c_open)
+                                {
+                                    for (auto& v : c.verses)
+                                    {
+                                        char v_label[32];
+                                        snprintf(v_label, sizeof(v_label), "%d", v.num);
+                                        ImGui::PushID(v.num);
+                                        ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                        ImGui::TreeNodeEx(v_label, v_flags);
+                                        ImGui::PopID();
+                                        if (ImGui::IsItemClicked())
+                                        {
+                                            nav_book = b.id;
+                                            nav_chapter = c.num;
+                                            nav_verse = v.num;
+                                        }
+                                    }
+                                    ImGui::TreePop();
+                                }
+                            }
+                            ImGui::TreePop();
+                        }
+                    }
+                    ImGui::TreePop();
+                }
+            }
 
             ImGui::End();
         }
@@ -347,9 +613,10 @@ int main(int, char**)
         FILE* f = fopen("tomewell_state.ini", "w");
         if (f)
         {
+            fprintf(f, "%s\n", def_translat.c_str());
             for (int i = 0; i < 16; i++)
             {
-                fprintf(f, "%d\n", extra_windows[i] ? 1: 0);
+                fprintf(f, "%d %s\n", translation_windows[i].open ? 1 : 0, translation_windows[i].translation.c_str());
             }
             fclose(f);
         }
