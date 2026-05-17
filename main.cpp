@@ -146,10 +146,16 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                             passage += v.text;
                             passage += "\n\n";
                         }
-                        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 1));
-                        ImGui::InputTextMultiline("##passage", &passage[0], passage.size() + 1,
-                            ImVec2(-FLT_MIN, -FLT_MIN), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll);
-                        ImGui::PopStyleColor();
+                        if (ImGui::Button("Copy"))
+                            ImGui::SetClipboardText(passage.c_str());
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("%zu verses", c.verses.size());
+                        ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
+                        for (auto& v : c.verses)
+                        {
+                            ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
+                        }
+                        ImGui::EndChild();
                         return;
                     }
                 return;
@@ -536,8 +542,10 @@ int main(int, char**)
                                     {
                                         char v_label[32];
                                         snprintf(v_label, sizeof(v_label), "%d", v.num);
+                                        ImGui::PushID(v.num);
                                         ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
                                         ImGui::TreeNodeEx(v_label, v_flags);
+                                        ImGui::PopID();
                                         if (ImGui::IsItemClicked())
                                         {
                                             nav_book = b.id;
