@@ -357,10 +357,23 @@ int main(int, char**)
                     translation_windows[i].translation = (strlen(trans) > 0) ? trans : "asv";
                 }
             }
+            // Try to read nav state (17th line: book chapter verse)
+            {
+                char buf[64];
+                if (fgets(buf, sizeof(buf), f))
+                {
+                    int b = 0, c = 0, v = 0;
+                    if (sscanf(buf, "%d %d %d", &b, &c, &v) >= 2)
+                    {
+                        nav_book = b;
+                        nav_chapter = c;
+                        nav_verse = (v > 0) ? v : -1;
+                    }
+                }
+            }
             fclose(f);
         }
     }
-
 
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -544,7 +557,7 @@ int main(int, char**)
                     for (auto& b : t.books)
                     {
                         ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
-                        if (b.id == nav_book) b_flags |= ImGuiTreeNodeFlags_Selected;
+                        if (b.id == nav_book) b_flags |= ImGuiTreeNodeFlags_Selected | ImGuiTreeNodeFlags_DefaultOpen;
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
                         if (ImGui::IsItemClicked())
                         {
@@ -560,7 +573,7 @@ int main(int, char**)
                                 snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
                                 ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
                                 if (b.id == nav_book && c.num == nav_chapter)
-                                    c_flags |= ImGuiTreeNodeFlags_Selected;
+                                    c_flags |= ImGuiTreeNodeFlags_Selected | ImGuiTreeNodeFlags_DefaultOpen;
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
                                 if (ImGui::IsItemClicked())
                                 {
@@ -576,6 +589,8 @@ int main(int, char**)
                                         snprintf(v_label, sizeof(v_label), "%d", v.num);
                                         ImGui::PushID(v.num);
                                         ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                        if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse)
+                                            v_flags |= ImGuiTreeNodeFlags_Selected;
                                         ImGui::TreeNodeEx(v_label, v_flags);
                                         ImGui::PopID();
                                         if (ImGui::IsItemClicked())
@@ -643,6 +658,7 @@ int main(int, char**)
             {
                 fprintf(f, "%d %s\n", translation_windows[i].open ? 1 : 0, translation_windows[i].translation.c_str());
             }
+            fprintf(f, "%d %d %d\n", nav_book, nav_chapter, nav_verse);
             fclose(f);
         }
     }
