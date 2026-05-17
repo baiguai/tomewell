@@ -549,6 +549,7 @@ int main(int, char**)
         {
             ImGui::Begin("Treeview");
 
+            static bool tree_inited = false;
             const auto& tree_data = get_translation(def_translat);
             for (auto& t : tree_data)
             {
@@ -557,7 +558,11 @@ int main(int, char**)
                     for (auto& b : t.books)
                     {
                         ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
-                        if (b.id == nav_book) b_flags |= ImGuiTreeNodeFlags_Selected | ImGuiTreeNodeFlags_DefaultOpen;
+                        if (b.id == nav_book)
+                        {
+                            b_flags |= ImGuiTreeNodeFlags_Selected;
+                            if (!tree_inited) ImGui::SetNextItemOpen(true);
+                        }
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
                         if (ImGui::IsItemClicked())
                         {
@@ -573,7 +578,10 @@ int main(int, char**)
                                 snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
                                 ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
                                 if (b.id == nav_book && c.num == nav_chapter)
-                                    c_flags |= ImGuiTreeNodeFlags_Selected | ImGuiTreeNodeFlags_DefaultOpen;
+                                {
+                                    c_flags |= ImGuiTreeNodeFlags_Selected;
+                                    if (!tree_inited) ImGui::SetNextItemOpen(true);
+                                }
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
                                 if (ImGui::IsItemClicked())
                                 {
@@ -609,6 +617,8 @@ int main(int, char**)
                     ImGui::TreePop();
                 }
             }
+
+            tree_inited = true;
 
             ImGui::End();
         }
