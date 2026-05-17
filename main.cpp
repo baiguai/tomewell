@@ -126,35 +126,38 @@ static const std::vector<TestamentInfo>& get_translation(const std::string& name
     return it->second;
 }
 
-static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter)
+static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
 {
     for (auto& t : data)
         for (auto& b : t.books)
             if (b.id == book_id)
             {
-                ImGui::Text("%s  -  Chapter %d", b.name.c_str(), chapter);
-                ImGui::Separator();
                 for (auto& c : b.chapters)
                     if (c.num == chapter)
                     {
+                        ImGui::Text("%s  -  Chapter %d", b.name.c_str(), chapter);
+                        ImGui::Separator();
                         std::string passage;
                         for (auto& v : c.verses)
-                        {
-                            char num_buf[16];
-                            snprintf(num_buf, sizeof(num_buf), "%d. ", v.num);
-                            passage += num_buf;
-                            passage += v.text;
-                            passage += "\n\n";
-                        }
+                            if (verse_num == -1 || v.num == verse_num)
+                            {
+                                char num_buf[16];
+                                snprintf(num_buf, sizeof(num_buf), "%d. ", v.num);
+                                passage += num_buf;
+                                passage += v.text;
+                                passage += "\n\n";
+                            }
                         if (ImGui::Button("Copy"))
                             ImGui::SetClipboardText(passage.c_str());
                         ImGui::SameLine();
-                        ImGui::TextDisabled("%zu verses", c.verses.size());
+                        if (verse_num == -1)
+                            ImGui::TextDisabled("%zu verses", c.verses.size());
+                        else
+                            ImGui::TextDisabled("Chapter %d : Verse %d", chapter, verse_num);
                         ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
                         for (auto& v : c.verses)
-                        {
-                            ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
-                        }
+                            if (verse_num == -1 || v.num == verse_num)
+                                ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
                         ImGui::EndChild();
                         return;
                     }
@@ -303,6 +306,7 @@ int main(int, char**)
     // Navigation state (driven by treeview)
     static int nav_book = 1;
     static int nav_chapter = 1;
+    static int nav_verse = -1;  // -1 means start from verse 1
 
     
 
@@ -400,6 +404,7 @@ int main(int, char**)
                     }
                     nav_book = 1;
                     nav_chapter = 1;
+                    nav_verse = -1;
                     remove("tomewell_state.ini");
                     reset_layout = true;
                 }
@@ -478,7 +483,7 @@ int main(int, char**)
             ImGui::TextDisabled("Window %d", i);
 
             const auto& data = get_translation(translation_windows[i].translation);
-            render_passage(data, nav_book, nav_chapter);
+            render_passage(data, nav_book, nav_chapter, nav_verse);
 
             ImGui::End();
         }
@@ -499,7 +504,7 @@ int main(int, char**)
             }
 
             const auto& data = get_translation(def_translat);
-            render_passage(data, nav_book, nav_chapter);
+            render_passage(data, nav_book, nav_chapter, nav_verse);
 
             ImGui::End();
         }
@@ -520,6 +525,7 @@ int main(int, char**)
                         {
                             nav_book = b.id;
                             nav_chapter = 1;
+                            nav_verse = -1;
                         }
                         if (b_open)
                         {
@@ -535,6 +541,7 @@ int main(int, char**)
                                 {
                                     nav_book = b.id;
                                     nav_chapter = c.num;
+                                    nav_verse = -1;
                                 }
                                 if (c_open)
                                 {
@@ -550,6 +557,7 @@ int main(int, char**)
                                         {
                                             nav_book = b.id;
                                             nav_chapter = c.num;
+                                            nav_verse = v.num;
                                         }
                                     }
                                     ImGui::TreePop();
