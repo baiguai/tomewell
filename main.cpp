@@ -138,6 +138,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 
 static std::string g_highlight_query;
+static bool g_tree_inited = false;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
@@ -159,31 +160,44 @@ static void render_highlighted_verse(int num, const std::string& text, const std
         return;
     }
 
+    // Build lower case copies for matching
     std::string lower_text, lower_query;
-    for (auto& c : text) lower_text += (char)tolower(c);
-    for (auto& c : query) lower_query += (char)tolower(c);
+    lower_text.reserve(text.size());
+    for (auto c : text) lower_text += (char)tolower((unsigned char)c);
+    for (auto c : query) lower_query += (char)tolower((unsigned char)c);
 
-    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
     ImGui::Text("%d. ", num);
     ImGui::SameLine(0, 0);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
 
     size_t start = 0;
-    size_t pos = 0;
-    while ((pos = lower_text.find(lower_query, start)) != std::string::npos)
+    while (start < text.size())
     {
+        size_t pos = lower_text.find(lower_query, start);
+        if (pos == std::string::npos)
+        {
+            ImGui::TextUnformatted(text.c_str() + start);
+            break;
+        }
+
         if (pos > start)
         {
+            float py = ImGui::GetCursorPosY();
             ImGui::TextUnformatted(text.c_str() + start, text.c_str() + pos);
-            ImGui::SameLine(0, 0);
+            if (ImGui::GetCursorPosY() == py)
+                ImGui::SameLine(0, 0);
         }
+
+        float py = ImGui::GetCursorPosY();
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f));
         ImGui::TextUnformatted(text.c_str() + pos, text.c_str() + pos + query.size());
         ImGui::PopStyleColor();
-        ImGui::SameLine(0, 0);
+        if (ImGui::GetCursorPosY() == py)
+            ImGui::SameLine(0, 0);
+
         start = pos + query.size();
     }
-    if (start < text.size())
-        ImGui::TextUnformatted(text.c_str() + start, text.c_str() + text.size());
+
     ImGui::PopTextWrapPos();
 }
 
@@ -631,9 +645,9 @@ int main(int, char**)
                     {
                         prev_query = cur;
                         search_results.clear();
+                        g_highlight_query = cur;
                         if (!cur.empty())
                         {
-                            g_highlight_query = cur;
                             const auto& data = get_translation(def_translat);
                             std::string query = cur;
                             for (auto& q : query) q = (char)tolower(q);
@@ -674,6 +688,7 @@ int main(int, char**)
                         }
                         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                         {
+                            g_tree_inited = false;
                             search_buf[0] = '\0';
                             search_results.clear();
                             show_search = false;
@@ -695,7 +710,6 @@ int main(int, char**)
         {
             ImGui::Begin("Treeview");
 
-            static bool tree_inited = false;
             const auto& tree_data = get_translation(def_translat);
             for (auto& t : tree_data)
             {
@@ -707,7 +721,7 @@ int main(int, char**)
                         if (b.id == nav_book)
                         {
                             b_flags |= ImGuiTreeNodeFlags_Selected;
-                            if (!tree_inited) ImGui::SetNextItemOpen(true);
+                            if (!g_tree_inited) ImGui::SetNextItemOpen(true);
                         }
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
                         if (ImGui::IsItemClicked())
@@ -726,7 +740,7 @@ int main(int, char**)
                                 if (b.id == nav_book && c.num == nav_chapter)
                                 {
                                     c_flags |= ImGuiTreeNodeFlags_Selected;
-                                    if (!tree_inited) ImGui::SetNextItemOpen(true);
+                                    if (!g_tree_inited) ImGui::SetNextItemOpen(true);
                                 }
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
                                 if (ImGui::IsItemClicked())
@@ -764,7 +778,7 @@ int main(int, char**)
                 }
             }
 
-            tree_inited = true;
+            g_tree_inited = true;
 
             ImGui::End();
         }
