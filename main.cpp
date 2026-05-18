@@ -1345,6 +1345,11 @@ int main(int, char**)
             const auto& tree_data = get_translation(def_translat);
             for (auto& t : tree_data)
             {
+                bool has_nav = false;
+                for (auto& b : t.books)
+                    if (b.id == nav_book) { has_nav = true; break; }
+                if (!g_tree_inited && has_nav)
+                    ImGui::SetNextItemOpen(true);
                 if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                 {
                     for (auto& b : t.books)
