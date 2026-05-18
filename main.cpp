@@ -207,6 +207,8 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 static std::string g_highlight_query;
 static bool g_tree_inited = false;
 static bool g_scroll_to_verse = false;
+static bool g_expand_all = false;
+static bool g_collapse_all = false;
 static std::vector<DataEntry> g_data_entries;
 static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
@@ -1343,12 +1345,68 @@ int main(int, char**)
             ImGui::Begin("Treeview");
 
             const auto& tree_data = get_translation(def_translat);
+            if (ImGui::SmallButton("Expand All"))
+            {
+                g_expand_all = true;
+                g_collapse_all = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Collapse All"))
+            {
+                g_collapse_all = true;
+                g_expand_all = false;
+            }
+            if (g_collapse_all)
+            {
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(true);
+                    if (ImGui::TreeNodeEx(t.label.c_str(), 0))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGui::SetNextItemOpen(true);
+                            if (ImGui::TreeNodeEx(b.name.c_str(), 0))
+                            {
+                                for (auto& c : b.chapters)
+                                {
+                                    char ch_label[32];
+                                    snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                    ImGui::SetNextItemOpen(false);
+                                    ImGui::TreeNodeEx(ch_label, 0);
+                                }
+                                ImGui::TreePop();
+                            }
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(true);
+                    if (ImGui::TreeNodeEx(t.label.c_str(), 0))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGui::SetNextItemOpen(false);
+                            ImGui::TreeNodeEx(b.name.c_str(), 0);
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(false);
+                    ImGui::TreeNodeEx(t.label.c_str(), 0);
+                }
+            }
+
             for (auto& t : tree_data)
             {
                 bool has_nav = false;
                 for (auto& b : t.books)
                     if (b.id == nav_book) { has_nav = true; break; }
-                if (!g_tree_inited && has_nav)
+                if (!g_collapse_all && (g_expand_all || (!g_tree_inited && has_nav)))
                     ImGui::SetNextItemOpen(true);
                 if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                 {
@@ -1358,8 +1416,10 @@ int main(int, char**)
                         if (b.id == nav_book)
                         {
                             b_flags |= ImGuiTreeNodeFlags_Selected;
-                            if (!g_tree_inited) ImGui::SetNextItemOpen(true);
+                            if (!g_collapse_all && !g_tree_inited) ImGui::SetNextItemOpen(true);
                         }
+                        if (!g_collapse_all && g_expand_all)
+                            ImGui::SetNextItemOpen(true);
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
                         if (ImGui::IsItemClicked())
                         {
@@ -1377,8 +1437,10 @@ int main(int, char**)
                                 if (b.id == nav_book && c.num == nav_chapter)
                                 {
                                     c_flags |= ImGuiTreeNodeFlags_Selected;
-                                    if (!g_tree_inited) ImGui::SetNextItemOpen(true);
+                                    if (!g_collapse_all && !g_tree_inited) ImGui::SetNextItemOpen(true);
                                 }
+                                if (!g_collapse_all && g_expand_all)
+                                    ImGui::SetNextItemOpen(false);
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
                                 if (ImGui::IsItemClicked())
                                 {
@@ -1421,6 +1483,8 @@ int main(int, char**)
             }
 
             g_tree_inited = true;
+            g_expand_all = false;
+            g_collapse_all = false;
 
             ImGui::End();
         }
