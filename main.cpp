@@ -10,6 +10,7 @@
 #include "main.h"
 #include "tinyfiledialogs.h"
 #include <ctime>
+#include <regex>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -1100,26 +1101,52 @@ int main(int, char**)
                     {
                         prev_query = cur;
                         search_results.clear();
-                        g_highlight_query = cur;
+                        g_highlight_query.clear();
                         if (!cur.empty())
                         {
                             const auto& data = get_translation(def_translat);
-                            std::string query = cur;
-                            for (auto& q : query) q = (char)tolower(q);
-                            for (auto& t : data)
-                                for (auto& b : t.books)
-                                    for (auto& c : b.chapters)
-                                        for (auto& v : c.verses)
-                                        {
-                                            std::string lower = v.text;
-                                            for (auto& ch : lower) ch = (char)tolower(ch);
-                                            if (lower.find(query) != std::string::npos)
+                            bool is_regex = (cur.size() >= 2 && cur[0] == 'r' && cur[1] == ':');
+                            std::string raw_query = is_regex ? cur.substr(2) : cur;
+                            g_highlight_query = raw_query;
+                            if (is_regex)
+                            {
+                                try
+                                {
+                                    std::regex pattern(raw_query, std::regex::icase | std::regex::optimize);
+                                    for (auto& t : data)
+                                        for (auto& b : t.books)
+                                            for (auto& c : b.chapters)
+                                                for (auto& v : c.verses)
+                                                {
+                                                    if (std::regex_search(v.text, pattern))
+                                                    {
+                                                        std::string snippet = v.text;
+                                                        if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                                        search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                                    }
+                                                }
+                                }
+                                catch (...) {}
+                            }
+                            else
+                            {
+                                std::string query = cur;
+                                for (auto& q : query) q = (char)tolower(q);
+                                for (auto& t : data)
+                                    for (auto& b : t.books)
+                                        for (auto& c : b.chapters)
+                                            for (auto& v : c.verses)
                                             {
-                                                std::string snippet = v.text;
-                                                if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
-                                                search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                                std::string lower = v.text;
+                                                for (auto& ch : lower) ch = (char)tolower(ch);
+                                                if (lower.find(query) != std::string::npos)
+                                                {
+                                                    std::string snippet = v.text;
+                                                    if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                                    search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                                }
                                             }
-                                        }
+                            }
                         }
                     }
                 }
