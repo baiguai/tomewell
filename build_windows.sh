@@ -14,9 +14,12 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 CXX="x86_64-w64-mingw32-g++"
-CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
+CC="x86_64-w64-mingw32-gcc"
+BASE_FLAGS="-O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
+CXXFLAGS="-std=c++11 $BASE_FLAGS"
+CFLAGS="$BASE_FLAGS"
 CXXFLAGS_STATIC="-static-libstdc++ -static-libgcc"
-LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32"
+LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32 -lole32 -lcomdlg32"
 
 SOURCES=(
     main.cpp
@@ -66,8 +69,14 @@ OBJS=()
 for src in "${SOURCES[@]}"; do
     base="$(basename "$src")"
     obj="${base%.*}.o"
-    echo "  $CXX -c $src"
-    $CXX $CXXFLAGS $CXXFLAGS_STATIC -c "$src" -o "$obj"
+    ext="${src##*.}"
+    if [[ "$ext" == "c" ]]; then
+        echo "  $CC -c $src"
+        $CC $CFLAGS -c "$src" -o "$obj"
+    else
+        echo "  $CXX -c $src"
+        $CXX $CXXFLAGS $CXXFLAGS_STATIC -c "$src" -o "$obj"
+    fi
     OBJS+=("$obj")
 done
 
