@@ -681,6 +681,16 @@ int main(int, char**)
                             g_data_path = buf;
                     }
                 }
+                // Try to read notes explorer visibility (19th line: 0 or 1)
+                {
+                    char buf[16];
+                    if (fgets(buf, sizeof(buf), f))
+                    {
+                        int n = 0;
+                        if (sscanf(buf, "%d", &n) == 1)
+                            show_menu = (n != 0);
+                    }
+                }
             }
             fclose(f);
         }
@@ -934,6 +944,13 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Settings"))
             {
+                if (ImGui::MenuItem("Toggle Menu", "Ctrl+M"))
+                {
+                    show_menu = !show_menu;
+                }
+
+                ImGui::Separator();
+
                 if (ImGui::MenuItem("Reset Layout"))
                 {
                     def_translat = "asv";
@@ -1456,6 +1473,7 @@ int main(int, char**)
             fprintf(f, "%d\n", show_notes ? 1 : 0);
             fprintf(f, "%d\n", show_notes_explorer ? 1 : 0);
             fprintf(f, "%s\n", g_data_path.c_str());
+            fprintf(f, "%d\n", show_menu ? 1 : 0);
             fclose(f);
         }
     }
