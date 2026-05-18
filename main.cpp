@@ -212,6 +212,7 @@ static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
 static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
+static int find_bookmark(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
 
 struct NotesTreeVerse { int num; };
 struct NotesTreeChapter { int num; bool has_chapter_note; std::vector<NotesTreeVerse> verses; };
@@ -355,6 +356,28 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                             ImGui::TextDisabled("%zu verses", c.verses.size());
                         else
                             ImGui::TextDisabled("Chapter %d : Verse %d", chapter, verse_num);
+                        ImGui::SameLine();
+                        bool bm = find_bookmark(g_data_entries, book_id, chapter, verse_num) >= 0;
+                        if (ImGui::SmallButton(bm ? "Unbookmark" : "Bookmark"))
+                        {
+                            int idx = find_bookmark(g_data_entries, book_id, chapter, verse_num);
+                            if (idx >= 0)
+                                g_data_entries.erase(g_data_entries.begin() + idx);
+                            else
+                            {
+                                DataEntry e;
+                                e.type = "bookmark";
+                                e.book_id = book_id;
+                                e.chapter = chapter;
+                                e.verse = verse_num;
+                                e.sel_start = -1;
+                                e.sel_end = -1;
+                                std::string ts = timestamp();
+                                e.created = ts;
+                                e.modified = ts;
+                                g_data_entries.push_back(e);
+                            }
+                        }
                         ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
                         for (auto& v : c.verses)
                             if (verse_num == -1 || v.num == verse_num)
@@ -372,6 +395,17 @@ static int find_entry(const std::vector<DataEntry>& entries, int book, int chapt
     {
         auto& e = entries[i];
         if (e.type == "note" && e.book_id == book && e.chapter == chapter && e.verse == verse)
+            return (int)i;
+    }
+    return -1;
+}
+
+static int find_bookmark(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        auto& e = entries[i];
+        if (e.type == "bookmark" && e.book_id == book && e.chapter == chapter && e.verse == verse)
             return (int)i;
     }
     return -1;
@@ -566,6 +600,7 @@ int main(int, char**)
 
     // Search state
     static bool show_search = false;
+    static bool show_bookmarks_dialog = false;
     static char search_buf[256] = "";
     static std::vector<SearchResult> search_results;
 
@@ -749,6 +784,30 @@ int main(int, char**)
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
             save_data_file(g_data_path, g_data_entries);
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_D))
+        {
+            show_bookmarks_dialog = !show_bookmarks_dialog;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && !ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_D))
+        {
+            int idx = find_bookmark(g_data_entries, nav_book, nav_chapter, nav_verse);
+            if (idx >= 0)
+                g_data_entries.erase(g_data_entries.begin() + idx);
+            else
+            {
+                DataEntry e;
+                e.type = "bookmark";
+                e.book_id = nav_book;
+                e.chapter = nav_chapter;
+                e.verse = nav_verse;
+                e.sel_start = -1;
+                e.sel_end = -1;
+                std::string ts = timestamp();
+                e.created = ts;
+                e.modified = ts;
+                g_data_entries.push_back(e);
+            }
+        }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
@@ -828,6 +887,33 @@ int main(int, char**)
                 if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
                 {
                     show_notes_explorer = true;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Bookmark Verse", "Ctrl+D"))
+                {
+                    int idx = find_bookmark(g_data_entries, nav_book, nav_chapter, nav_verse);
+                    if (idx >= 0)
+                        g_data_entries.erase(g_data_entries.begin() + idx);
+                    else
+                    {
+                        DataEntry e;
+                        e.type = "bookmark";
+                        e.book_id = nav_book;
+                        e.chapter = nav_chapter;
+                        e.verse = nav_verse;
+                        e.sel_start = -1;
+                        e.sel_end = -1;
+                        std::string ts = timestamp();
+                        e.created = ts;
+                        e.modified = ts;
+                        g_data_entries.push_back(e);
+                    }
+                }
+                if (ImGui::MenuItem("Show Bookmarks", "Ctrl+Shift+D"))
+                {
+                    show_bookmarks_dialog = !show_bookmarks_dialog;
                 }
 
                 ImGui::Separator();
@@ -1185,6 +1271,53 @@ int main(int, char**)
             }
             ImGui::End();
         }
+        }
+
+        // Bookmarks dialog
+        if (show_bookmarks_dialog)
+        {
+            ImGui::Begin("Bookmarks", &show_bookmarks_dialog);
+            {
+                const auto& bm_tree_data = get_translation(def_translat);
+                bool any = false;
+                for (size_t i = 0; i < g_data_entries.size(); i++)
+                {
+                    auto& e = g_data_entries[i];
+                    if (e.type != "bookmark") continue;
+                    any = true;
+                    const char* bn = book_name(bm_tree_data, e.book_id);
+                    if (e.verse >= 0)
+                        ImGui::Text("%s %d:%d", bn, e.chapter, e.verse);
+                    else
+                        ImGui::Text("%s Chapter %d", bn, e.chapter);
+                    ImGui::SameLine();
+                    char go_id[32];
+                    snprintf(go_id, sizeof(go_id), "Go##bm%d", (int)i);
+                    if (ImGui::SmallButton(go_id))
+                    {
+                        nav_book = e.book_id;
+                        nav_chapter = e.chapter;
+                        nav_verse = e.verse;
+                        g_tree_inited = false;
+                        g_scroll_to_verse = true;
+                        show_bookmarks_dialog = false;
+                    }
+                    ImGui::SameLine();
+                    char del_id[32];
+                    snprintf(del_id, sizeof(del_id), "X##bm%d", (int)i);
+                    if (ImGui::SmallButton(del_id))
+                    {
+                        g_data_entries.erase(g_data_entries.begin() + i);
+                        i--;
+                    }
+                }
+                if (!any)
+                {
+                    ImGui::TextDisabled("No bookmarks yet.");
+                    ImGui::TextDisabled("Navigate to a verse and press Ctrl+D to bookmark it.");
+                }
+            }
+            ImGui::End();
         }
 
         {
