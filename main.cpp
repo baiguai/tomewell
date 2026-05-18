@@ -214,7 +214,7 @@ static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
 
 struct NotesTreeVerse { int num; };
-struct NotesTreeChapter { int num; std::vector<NotesTreeVerse> verses; };
+struct NotesTreeChapter { int num; bool has_chapter_note; std::vector<NotesTreeVerse> verses; };
 struct NotesTreeBook { int id; std::string name; std::vector<NotesTreeChapter> chapters; };
 struct NotesTreeTestament { int num; std::string label; std::vector<NotesTreeBook> books; };
 static std::vector<NotesTreeTestament> g_notes_tree;
@@ -239,7 +239,8 @@ static void rebuild_notes_tree(const std::vector<TestamentInfo>& bible_data)
             {
                 NotesTreeChapter ntc;
                 ntc.num = c.num;
-                bool has_c = false;
+                ntc.has_chapter_note = (find_entry(g_data_entries, b.id, c.num, -1) >= 0);
+                bool has_c = ntc.has_chapter_note;
                 for (auto& v : c.verses)
                 {
                     if (find_entry(g_data_entries, b.id, c.num, v.num) >= 0)
@@ -702,6 +703,28 @@ int main(int, char**)
         {
             show_search = !show_search;
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
+        {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+            const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+            if (fp)
+            {
+                g_data_path = fp;
+                g_data_entries.clear();
+                note_edit_buf[0] = '\0';
+                note_book = note_chapter = note_verse = -1;
+                g_notes_tree_dirty = true;
+                save_data_file(g_data_path, g_data_entries);
+            }
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_N))
+        {
+            show_notes = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_X))
+        {
+            show_notes_explorer = true;
+        }
 
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_O))
         {
@@ -749,13 +772,13 @@ int main(int, char**)
                         if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
-                if (ImGui::MenuItem("Show Notes"))
+                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
                 {
                     show_notes = true;
                 }
                 ImGui::Separator();
 
-                if (ImGui::MenuItem("New Database"))
+                if (ImGui::MenuItem("New Database", "Ctrl+N"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
                     const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
@@ -769,7 +792,7 @@ int main(int, char**)
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
-                if (ImGui::MenuItem("Open Database"))
+                if (ImGui::MenuItem("Open Database", "Ctrl+O"))
                 {
                     const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
                     if (fp)
@@ -787,12 +810,12 @@ int main(int, char**)
                         }
                     }
                 }
-                if (ImGui::MenuItem("Save Database"))
+                if (ImGui::MenuItem("Save Database", "Ctrl+S"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
                     save_data_file(g_data_path, g_data_entries);
                 }
-                if (ImGui::MenuItem("Save Database As"))
+                if (ImGui::MenuItem("Save Database As", "Ctrl+Shift+S"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
                     const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
@@ -802,14 +825,14 @@ int main(int, char**)
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
-                if (ImGui::MenuItem("Show Notes Explorer"))
+                if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
                 {
                     show_notes_explorer = true;
                 }
 
                 ImGui::Separator();
 
-                if (ImGui::MenuItem("Quit"))
+                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
                 {
                     glfwSetWindowShouldClose(window, true);
                 }
@@ -817,7 +840,7 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Search"))
             {
-                if (ImGui::MenuItem("Search Bible"))
+                if (ImGui::MenuItem("Search Bible", "Ctrl+F"))
                 {
                     show_search = true;
                 }
@@ -1138,17 +1161,30 @@ int main(int, char**)
                                                 nav_verse = v.num;
                                             }
                                         }
+                                        if (c.has_chapter_note)
+                                        {
+                                            ImGuiTreeNodeFlags cn_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                            if (b.id == nav_book && c.num == nav_chapter && nav_verse == -1)
+                                                cn_flags |= ImGuiTreeNodeFlags_Selected;
+                                            ImGui::TreeNodeEx("Chapter Note", cn_flags);
+                                            if (ImGui::IsItemClicked())
+                                            {
+                                                nav_book = b.id;
+                                                nav_chapter = c.num;
+                                                nav_verse = -1;
+                                            }
+                                        }
                                         ImGui::TreePop();
                                     }
-                                }
-                                ImGui::TreePop();
                             }
+                            ImGui::TreePop();
                         }
-                        ImGui::TreePop();
                     }
+                    ImGui::TreePop();
                 }
             }
             ImGui::End();
+        }
         }
 
         {
