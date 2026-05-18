@@ -14,12 +14,13 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 CXX="x86_64-w64-mingw32-g++"
-CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR"
+CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
 CXXFLAGS_STATIC="-static-libstdc++ -static-libgcc"
 LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32"
 
 SOURCES=(
     main.cpp
+    "$DEPS_DIR/tinyfiledialogs/tinyfiledialogs.c"
     "$IMGUI_DIR/imgui.cpp"
     "$IMGUI_DIR/imgui_demo.cpp"
     "$IMGUI_DIR/imgui_draw.cpp"
@@ -64,7 +65,7 @@ FULL_EXE="$BIN_DIR/$EXE"
 OBJS=()
 for src in "${SOURCES[@]}"; do
     base="$(basename "$src")"
-    obj="${base%.cpp}.o"
+    obj="${base%.*}.o"
     echo "  $CXX -c $src"
     $CXX $CXXFLAGS $CXXFLAGS_STATIC -c "$src" -o "$obj"
     OBJS+=("$obj")

@@ -8,6 +8,7 @@
 // - Introduction, links and more at the top of imgui.cpp
 
 #include "main.h"
+#include "tinyfiledialogs.h"
 #include <ctime>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -503,10 +504,7 @@ int main(int, char**)
     static int note_chapter = -1;
     static int note_verse = -1;
 
-    // Data file dialog state
-    static bool show_data_dialog = false;
-    static int data_dialog_mode = 0; // 0=new, 1=open, 2=save_as
-    static char data_dialog_buf[1024] = "";
+    static const char* filters[] = {"*.json"};
 
     // Search state
     static bool show_search = false;
@@ -638,6 +636,36 @@ int main(int, char**)
             show_search = !show_search;
         }
 
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_O))
+        {
+            const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+            if (fp)
+            {
+                flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                note_edit_buf[0] = '\0';
+                std::ifstream t(fp);
+                if (t.is_open())
+                {
+                    t.close();
+                    g_data_entries = load_data_file(fp);
+                    g_data_path = fp;
+                }
+            }
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_S))
+        {
+            save_data_file(g_data_path, g_data_entries);
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_S))
+        {
+            const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+            if (fp)
+            {
+                g_data_path = fp;
+                save_data_file(g_data_path, g_data_entries);
+            }
+        }
+
         // Create the main menu
         if (show_menu && ImGui::BeginMainMenuBar())
         {
@@ -658,17 +686,33 @@ int main(int, char**)
 
                 if (ImGui::MenuItem("New Database"))
                 {
-                    data_dialog_mode = 0;
-                    data_dialog_buf[0] = '\0';
-                    show_data_dialog = true;
-                    ImGui::OpenPopup("Data File");
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                    const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+                    if (fp)
+                    {
+                        g_data_path = fp;
+                        g_data_entries.clear();
+                        note_edit_buf[0] = '\0';
+                        note_book = note_chapter = note_verse = -1;
+                        save_data_file(g_data_path, g_data_entries);
+                    }
                 }
                 if (ImGui::MenuItem("Open Database"))
                 {
-                    data_dialog_mode = 1;
-                    data_dialog_buf[0] = '\0';
-                    show_data_dialog = true;
-                    ImGui::OpenPopup("Data File");
+                    const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+                    if (fp)
+                    {
+                        flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                        note_edit_buf[0] = '\0';
+                        std::ifstream t(fp);
+                        if (t.is_open())
+                        {
+                            t.close();
+                            g_data_entries = load_data_file(fp);
+                            g_data_path = fp;
+                            note_book = note_chapter = note_verse = -1;
+                        }
+                    }
                 }
                 if (ImGui::MenuItem("Save Database"))
                 {
@@ -676,10 +720,12 @@ int main(int, char**)
                 }
                 if (ImGui::MenuItem("Save Database As"))
                 {
-                    data_dialog_mode = 2;
-                    data_dialog_buf[0] = '\0';
-                    show_data_dialog = true;
-                    ImGui::OpenPopup("Data File");
+                    const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+                    if (fp)
+                    {
+                        g_data_path = fp;
+                        save_data_file(g_data_path, g_data_entries);
+                    }
                 }
 
                 ImGui::Separator();
@@ -937,12 +983,7 @@ int main(int, char**)
 
             ImGui::Begin("Notes Editor", &show_notes);
             {
-                size_t slash = g_data_path.rfind('/');
-                std::string fname = (slash != std::string::npos) ? g_data_path.substr(slash + 1) : g_data_path;
-                ImGui::TextDisabled("%s", fname.c_str());
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Save"))
-                    save_data_file(g_data_path, g_data_entries);
+                ImGui::TextDisabled("%s", g_data_path.c_str());
 
                 const char* bn = book_name(tree_data, note_book);
                 if (note_verse >= 0)
@@ -956,57 +997,6 @@ int main(int, char**)
                     ImVec2(-FLT_MIN, -FLT_MIN));
             }
             ImGui::End();
-        }
-
-        // Data file dialog
-        if (show_data_dialog)
-        {
-            ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
-            if (ImGui::BeginPopupModal("Data File", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-            {
-                const char* labels[] = {"New file path:", "Open file path:", "Save as path:"};
-                ImGui::Text("%s", labels[data_dialog_mode]);
-                ImGui::InputText("##path", data_dialog_buf, sizeof(data_dialog_buf));
-                if (ImGui::Button("OK"))
-                {
-                    std::string p = data_dialog_buf;
-                    if (!p.empty())
-                    {
-                        if (p.find('/') != 0 && p.find(':') == std::string::npos)
-                            p = exe_dir() + "/" + p;
-                        if (data_dialog_mode == 0)
-                        {
-                            create_default_data_file(p);
-                            g_data_entries.clear();
-                            g_data_path = p;
-                        }
-                        else if (data_dialog_mode == 1)
-                        {
-                            std::ifstream t(p);
-                            if (t.is_open())
-                            {
-                                t.close();
-                                g_data_entries = load_data_file(p);
-                                g_data_path = p;
-                            }
-                        }
-                        else // save_as
-                        {
-                            g_data_path = p;
-                            save_data_file(g_data_path, g_data_entries);
-                        }
-                        show_data_dialog = false;
-                        ImGui::CloseCurrentPopup();
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Cancel"))
-                {
-                    show_data_dialog = false;
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::EndPopup();
-            }
         }
 
         {
