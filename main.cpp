@@ -211,6 +211,61 @@ static std::vector<DataEntry> g_data_entries;
 static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
+static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
+
+struct NotesTreeVerse { int num; };
+struct NotesTreeChapter { int num; std::vector<NotesTreeVerse> verses; };
+struct NotesTreeBook { int id; std::string name; std::vector<NotesTreeChapter> chapters; };
+struct NotesTreeTestament { int num; std::string label; std::vector<NotesTreeBook> books; };
+static std::vector<NotesTreeTestament> g_notes_tree;
+static bool g_notes_tree_dirty = true;
+
+static void rebuild_notes_tree(const std::vector<TestamentInfo>& bible_data)
+{
+    g_notes_tree.clear();
+    for (auto& t : bible_data)
+    {
+        NotesTreeTestament ntt;
+        ntt.num = t.num;
+        ntt.label = t.label;
+        bool has_t = false;
+        for (auto& b : t.books)
+        {
+            NotesTreeBook ntb;
+            ntb.id = b.id;
+            ntb.name = b.name;
+            bool has_b = false;
+            for (auto& c : b.chapters)
+            {
+                NotesTreeChapter ntc;
+                ntc.num = c.num;
+                bool has_c = false;
+                for (auto& v : c.verses)
+                {
+                    if (find_entry(g_data_entries, b.id, c.num, v.num) >= 0)
+                    {
+                        ntc.verses.push_back({v.num});
+                        has_c = true;
+                    }
+                }
+                if (has_c)
+                {
+                    ntb.chapters.push_back(ntc);
+                    has_b = true;
+                }
+            }
+            if (has_b)
+            {
+                ntt.books.push_back(ntb);
+                has_t = true;
+            }
+        }
+        if (has_t)
+            g_notes_tree.push_back(ntt);
+    }
+    g_notes_tree_dirty = false;
+}
+
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
 {
     auto it = s_trans_cache.find(name);
@@ -361,6 +416,7 @@ static void flush_note(int book, int chapter, int verse, const char* buf)
             g_data_entries.push_back(e);
         }
     }
+    g_notes_tree_dirty = true;
 }
 
 // Main code
@@ -497,8 +553,9 @@ int main(int, char**)
     // Default translation for main window
     static std::string def_translat = "asv";
 
-    // Notes editor state
+    // Notes windows state
     static bool show_notes = false;
+    static bool show_notes_explorer = false;
     static char note_edit_buf[65536] = "";
     static int note_book = -1;
     static int note_chapter = -1;
@@ -568,7 +625,17 @@ int main(int, char**)
                             show_notes = (n != 0);
                     }
                 }
-                // Try to read data file path (19th line)
+                // Try to read notes explorer visibility (19th line: 0 or 1)
+                {
+                    char buf[16];
+                    if (fgets(buf, sizeof(buf), f))
+                    {
+                        int n = 0;
+                        if (sscanf(buf, "%d", &n) == 1)
+                            show_notes_explorer = (n != 0);
+                    }
+                }
+                // Try to read data file path
                 {
                     char buf[1024];
                     if (fgets(buf, sizeof(buf), f))
@@ -649,15 +716,19 @@ int main(int, char**)
                     t.close();
                     g_data_entries = load_data_file(fp);
                     g_data_path = fp;
+                    note_book = note_chapter = note_verse = -1;
+                    g_notes_tree_dirty = true;
                 }
             }
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_S))
         {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
             save_data_file(g_data_path, g_data_entries);
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_S))
         {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
             const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
             if (fp)
             {
@@ -694,6 +765,7 @@ int main(int, char**)
                         g_data_entries.clear();
                         note_edit_buf[0] = '\0';
                         note_book = note_chapter = note_verse = -1;
+                        g_notes_tree_dirty = true;
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
@@ -711,21 +783,28 @@ int main(int, char**)
                             g_data_entries = load_data_file(fp);
                             g_data_path = fp;
                             note_book = note_chapter = note_verse = -1;
+                            g_notes_tree_dirty = true;
                         }
                     }
                 }
                 if (ImGui::MenuItem("Save Database"))
                 {
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
                     save_data_file(g_data_path, g_data_entries);
                 }
                 if (ImGui::MenuItem("Save Database As"))
                 {
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
                     const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
                     if (fp)
                     {
                         g_data_path = fp;
                         save_data_file(g_data_path, g_data_entries);
                     }
+                }
+                if (ImGui::MenuItem("Show Notes Explorer"))
+                {
+                    show_notes_explorer = true;
                 }
 
                 ImGui::Separator();
@@ -999,6 +1078,79 @@ int main(int, char**)
             ImGui::End();
         }
 
+        // Notes Explorer
+        if (show_notes_explorer)
+        {
+            const auto& notes_tree_data = get_translation(def_translat);
+            if (g_notes_tree_dirty)
+                rebuild_notes_tree(notes_tree_data);
+
+            ImGui::Begin("Notes Explorer", &show_notes_explorer);
+            {
+                for (auto& t : g_notes_tree)
+                {
+                    if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                            if (b.id == nav_book)
+                                b_flags |= ImGuiTreeNodeFlags_Selected;
+                            bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
+                            if (ImGui::IsItemClicked())
+                            {
+                                nav_book = b.id;
+                                nav_chapter = 1;
+                                nav_verse = -1;
+                            }
+                            if (b_open)
+                            {
+                                for (auto& c : b.chapters)
+                                {
+                                    char ch_label[32];
+                                    snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                    ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                    if (b.id == nav_book && c.num == nav_chapter)
+                                        c_flags |= ImGuiTreeNodeFlags_Selected;
+                                    bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
+                                    if (ImGui::IsItemClicked())
+                                    {
+                                        nav_book = b.id;
+                                        nav_chapter = c.num;
+                                        nav_verse = -1;
+                                    }
+                                    if (c_open)
+                                    {
+                                        for (auto& v : c.verses)
+                                        {
+                                            char v_label[32];
+                                            snprintf(v_label, sizeof(v_label), "%d", v.num);
+                                            ImGui::PushID(v.num);
+                                            ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                            if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse)
+                                                v_flags |= ImGuiTreeNodeFlags_Selected;
+                                            ImGui::TreeNodeEx(v_label, v_flags);
+                                            ImGui::PopID();
+                                            if (ImGui::IsItemClicked())
+                                            {
+                                                nav_book = b.id;
+                                                nav_chapter = c.num;
+                                                nav_verse = v.num;
+                                            }
+                                        }
+                                        ImGui::TreePop();
+                                    }
+                                }
+                                ImGui::TreePop();
+                            }
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+            }
+            ImGui::End();
+        }
+
         {
             ImGui::Begin("Treeview");
 
@@ -1131,6 +1283,7 @@ int main(int, char**)
             }
             fprintf(f, "%d %d %d\n", nav_book, nav_chapter, nav_verse);
             fprintf(f, "%d\n", show_notes ? 1 : 0);
+            fprintf(f, "%d\n", show_notes_explorer ? 1 : 0);
             fprintf(f, "%s\n", g_data_path.c_str());
             fclose(f);
         }
