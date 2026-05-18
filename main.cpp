@@ -1277,6 +1277,8 @@ int main(int, char**)
         if (show_bookmarks_dialog)
         {
             ImGui::Begin("Bookmarks", &show_bookmarks_dialog);
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                show_bookmarks_dialog = false;
             {
                 const auto& bm_tree_data = get_translation(def_translat);
                 bool any = false;
