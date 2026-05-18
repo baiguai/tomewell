@@ -8,6 +8,7 @@
 // - Introduction, links and more at the top of imgui.cpp
 
 #include "main.h"
+#include <ctime>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -48,6 +49,71 @@ std::string exe_dir()
     }
 #endif
     return cached;
+}
+
+std::string timestamp()
+{
+    std::time_t t = std::time(nullptr);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", std::localtime(&t));
+    return buf;
+}
+
+std::vector<DataEntry> load_data_file(const std::string& path)
+{
+    std::vector<DataEntry> entries;
+    std::ifstream f(path);
+    if (!f.is_open()) return entries;
+    try
+    {
+        auto j = nlohmann::json::parse(f);
+        auto& arr = j["entries"];
+        for (auto& item : arr)
+        {
+            DataEntry e;
+            e.type = item.value("type", "note");
+            e.book_id = item.value("book", 0);
+            e.chapter = item.value("chapter", 0);
+            e.verse = item.value("verse", -1);
+            e.sel_start = item.value("sel_start", -1);
+            e.sel_end = item.value("sel_end", -1);
+            e.content = item.value("content", "");
+            e.created = item.value("created", "");
+            e.modified = item.value("modified", "");
+            entries.push_back(e);
+        }
+    }
+    catch (...) {}
+    return entries;
+}
+
+void save_data_file(const std::string& path, const std::vector<DataEntry>& entries)
+{
+    nlohmann::json j;
+    j["version"] = 1;
+    auto& arr = j["entries"];
+    for (auto& e : entries)
+    {
+        nlohmann::json item;
+        item["type"] = e.type;
+        item["book"] = e.book_id;
+        item["chapter"] = e.chapter;
+        item["verse"] = e.verse;
+        item["sel_start"] = e.sel_start;
+        item["sel_end"] = e.sel_end;
+        item["content"] = e.content;
+        item["created"] = e.created;
+        item["modified"] = e.modified;
+        arr.push_back(item);
+    }
+    std::ofstream f(path);
+    if (f.is_open()) f << j.dump(2) << "\n";
+}
+
+void create_default_data_file(const std::string& path)
+{
+    std::ofstream f(path);
+    if (f.is_open()) f << "{\n  \"version\": 1,\n  \"entries\": []\n}\n";
 }
 
 
@@ -140,6 +206,8 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 static std::string g_highlight_query;
 static bool g_tree_inited = false;
 static bool g_scroll_to_verse = false;
+static std::vector<DataEntry> g_data_entries;
+static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
 
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
@@ -239,6 +307,59 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                     }
                 return;
             }
+}
+
+static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        auto& e = entries[i];
+        if (e.type == "note" && e.book_id == book && e.chapter == chapter && e.verse == verse)
+            return (int)i;
+    }
+    return -1;
+}
+
+static const char* book_name(const std::vector<TestamentInfo>& data, int id)
+{
+    for (auto& t : data)
+        for (auto& b : t.books)
+            if (b.id == id) return b.name.c_str();
+    return "Unknown";
+}
+
+static void flush_note(int book, int chapter, int verse, const char* buf)
+{
+    if (book < 0) return;
+    std::string content = buf;
+    int idx = find_entry(g_data_entries, book, chapter, verse);
+    if (content.empty())
+    {
+        if (idx >= 0) g_data_entries.erase(g_data_entries.begin() + idx);
+    }
+    else
+    {
+        std::string ts = timestamp();
+        if (idx >= 0)
+        {
+            g_data_entries[idx].content = content;
+            g_data_entries[idx].modified = ts;
+        }
+        else
+        {
+            DataEntry e;
+            e.type = "note";
+            e.book_id = book;
+            e.chapter = chapter;
+            e.verse = verse;
+            e.sel_start = -1;
+            e.sel_end = -1;
+            e.content = content;
+            e.created = ts;
+            e.modified = ts;
+            g_data_entries.push_back(e);
+        }
+    }
 }
 
 // Main code
@@ -375,6 +496,18 @@ int main(int, char**)
     // Default translation for main window
     static std::string def_translat = "asv";
 
+    // Notes editor state
+    static bool show_notes = false;
+    static char note_edit_buf[65536] = "";
+    static int note_book = -1;
+    static int note_chapter = -1;
+    static int note_verse = -1;
+
+    // Data file dialog state
+    static bool show_data_dialog = false;
+    static int data_dialog_mode = 0; // 0=new, 1=open, 2=save_as
+    static char data_dialog_buf[1024] = "";
+
     // Search state
     static bool show_search = false;
     static char search_buf[256] = "";
@@ -427,9 +560,41 @@ int main(int, char**)
                         nav_verse = (v > 0) ? v : -1;
                     }
                 }
+                // Try to read notes visibility (18th line: 0 or 1)
+                {
+                    char buf[16];
+                    if (fgets(buf, sizeof(buf), f))
+                    {
+                        int n = 0;
+                        if (sscanf(buf, "%d", &n) == 1)
+                            show_notes = (n != 0);
+                    }
+                }
+                // Try to read data file path (19th line)
+                {
+                    char buf[1024];
+                    if (fgets(buf, sizeof(buf), f))
+                    {
+                        buf[strcspn(buf, "\r\n")] = 0;
+                        if (strlen(buf) > 0)
+                            g_data_path = buf;
+                    }
+                }
             }
             fclose(f);
         }
+    }
+
+    // Load/create data file
+    {
+        if (g_data_path.empty())
+            g_data_path = exe_dir() + "/notes.json";
+        std::ifstream test(g_data_path);
+        if (!test.is_open())
+            create_default_data_file(g_data_path);
+        else
+            test.close();
+        g_data_entries = load_data_file(g_data_path);
     }
 
     // Main loop
@@ -485,6 +650,40 @@ int main(int, char**)
                         if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
+                if (ImGui::MenuItem("Show Notes"))
+                {
+                    show_notes = true;
+                }
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("New Database"))
+                {
+                    data_dialog_mode = 0;
+                    data_dialog_buf[0] = '\0';
+                    show_data_dialog = true;
+                    ImGui::OpenPopup("Data File");
+                }
+                if (ImGui::MenuItem("Open Database"))
+                {
+                    data_dialog_mode = 1;
+                    data_dialog_buf[0] = '\0';
+                    show_data_dialog = true;
+                    ImGui::OpenPopup("Data File");
+                }
+                if (ImGui::MenuItem("Save Database"))
+                {
+                    save_data_file(g_data_path, g_data_entries);
+                }
+                if (ImGui::MenuItem("Save Database As"))
+                {
+                    data_dialog_mode = 2;
+                    data_dialog_buf[0] = '\0';
+                    show_data_dialog = true;
+                    ImGui::OpenPopup("Data File");
+                }
+
+                ImGui::Separator();
+
                 if (ImGui::MenuItem("Quit"))
                 {
                     glfwSetWindowShouldClose(window, true);
@@ -512,6 +711,8 @@ int main(int, char**)
                     nav_book = 1;
                     nav_chapter = 1;
                     nav_verse = -1;
+                    show_notes = false;
+                    g_data_path = exe_dir() + "/notes.json";
                     remove((exe_dir() + "/tomewell_state.ini").c_str());
                     reset_layout = true;
                 }
@@ -709,6 +910,105 @@ int main(int, char**)
         if (!show_search)
             g_highlight_query.clear();
 
+        // Notes editor
+        if (show_notes)
+        {
+            const auto& tree_data = get_translation(def_translat);
+            if (nav_book != note_book || nav_chapter != note_chapter || nav_verse != note_verse)
+            {
+                flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                note_book = nav_book;
+                note_chapter = nav_chapter;
+                note_verse = nav_verse;
+                int idx = find_entry(g_data_entries, note_book, note_chapter, note_verse);
+                if (idx >= 0)
+                {
+                    const auto& c = g_data_entries[idx].content;
+                    size_t len = c.size();
+                    if (len >= sizeof(note_edit_buf)) len = sizeof(note_edit_buf) - 1;
+                    std::memcpy(note_edit_buf, c.c_str(), len);
+                    note_edit_buf[len] = '\0';
+                }
+                else
+                {
+                    note_edit_buf[0] = '\0';
+                }
+            }
+
+            ImGui::Begin("Notes Editor", &show_notes);
+            {
+                size_t slash = g_data_path.rfind('/');
+                std::string fname = (slash != std::string::npos) ? g_data_path.substr(slash + 1) : g_data_path;
+                ImGui::TextDisabled("%s", fname.c_str());
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Save"))
+                    save_data_file(g_data_path, g_data_entries);
+
+                const char* bn = book_name(tree_data, note_book);
+                if (note_verse >= 0)
+                    ImGui::Text("%s  %d:%d", bn, note_chapter, note_verse);
+                else
+                    ImGui::Text("%s  Chapter %d", bn, note_chapter);
+
+                ImGui::Separator();
+
+                ImGui::InputTextMultiline("##note", note_edit_buf, sizeof(note_edit_buf),
+                    ImVec2(-FLT_MIN, -FLT_MIN));
+            }
+            ImGui::End();
+        }
+
+        // Data file dialog
+        if (show_data_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
+            if (ImGui::BeginPopupModal("Data File", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                const char* labels[] = {"New file path:", "Open file path:", "Save as path:"};
+                ImGui::Text("%s", labels[data_dialog_mode]);
+                ImGui::InputText("##path", data_dialog_buf, sizeof(data_dialog_buf));
+                if (ImGui::Button("OK"))
+                {
+                    std::string p = data_dialog_buf;
+                    if (!p.empty())
+                    {
+                        if (p.find('/') != 0 && p.find(':') == std::string::npos)
+                            p = exe_dir() + "/" + p;
+                        if (data_dialog_mode == 0)
+                        {
+                            create_default_data_file(p);
+                            g_data_entries.clear();
+                            g_data_path = p;
+                        }
+                        else if (data_dialog_mode == 1)
+                        {
+                            std::ifstream t(p);
+                            if (t.is_open())
+                            {
+                                t.close();
+                                g_data_entries = load_data_file(p);
+                                g_data_path = p;
+                            }
+                        }
+                        else // save_as
+                        {
+                            g_data_path = p;
+                            save_data_file(g_data_path, g_data_entries);
+                        }
+                        show_data_dialog = false;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                {
+                    show_data_dialog = false;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+        }
+
         {
             ImGui::Begin("Treeview");
 
@@ -825,6 +1125,10 @@ int main(int, char**)
     glfwTerminate();
 
 
+    // Flush and save notes
+    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+    save_data_file(g_data_path, g_data_entries);
+
     // Store custom state
     {
         FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
@@ -836,6 +1140,8 @@ int main(int, char**)
                 fprintf(f, "%d %s\n", translation_windows[i].open ? 1 : 0, translation_windows[i].translation.c_str());
             }
             fprintf(f, "%d %d %d\n", nav_book, nav_chapter, nav_verse);
+            fprintf(f, "%d\n", show_notes ? 1 : 0);
+            fprintf(f, "%s\n", g_data_path.c_str());
             fclose(f);
         }
     }

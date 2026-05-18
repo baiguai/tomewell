@@ -14,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 CXX="x86_64-w64-mingw32-g++"
-CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include"
+CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR"
 CXXFLAGS_STATIC="-static-libstdc++ -static-libgcc"
 LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32"
 
