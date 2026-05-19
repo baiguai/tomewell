@@ -1167,6 +1167,7 @@ int main(int, char**)
         if (show_search)
         {
             ImGui::SetNextWindowSize(ImVec2(560, 440), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin("Search Bible", &show_search))
             {
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape))
@@ -1298,6 +1299,7 @@ int main(int, char**)
         // Navigation history dialog
         if (show_history_dialog)
         {
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Navigation History", &show_history_dialog);
             {
@@ -1372,6 +1374,7 @@ int main(int, char**)
             if (g_notes_tree_dirty)
                 rebuild_notes_tree(notes_tree_data);
 
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Notes Explorer", &show_notes_explorer);
             {
@@ -1504,6 +1507,7 @@ int main(int, char**)
 
         if (show_special_search_dialog)
         {
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
             ImGui::Begin("Special Search Commands", &show_special_search_dialog);
             if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
