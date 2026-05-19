@@ -696,6 +696,11 @@ int main(int, char**)
                     int n = 0;
                     if (sscanf(buf, "%d", &n) == 1) show_history_dialog = (n != 0);
                 }
+                else if (section == "[bookmarks]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_bookmarks_dialog = (n != 0);
+                }
             }
             fclose(f);
         }
@@ -1038,6 +1043,7 @@ int main(int, char**)
                     show_search = false;
                     show_bookmarks_dialog = false;
                     show_history_dialog = false;
+                    show_bookmarks_dialog = false;
 
                     g_data_path = exe_dir() + "/notes.json";
                     remove((exe_dir() + "/tomewell_state.ini").c_str());
@@ -1856,6 +1862,7 @@ int main(int, char**)
             fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
             fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
             fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
+            fprintf(f, "[bookmarks]\n%d\n", show_bookmarks_dialog ? 1 : 0);
             fclose(f);
         }
     }

@@ -663,19 +663,19 @@
 
             <div class="search-dialog" id="linkSearchDialog" style="display: none;">
                 <input id="linkSearchInput" placeholder="Search to insert link..." type="text">
-                <div class="search-results" id="linkSearchList"></div>
+                <div class="search-results" id="linkSearchList"><div>Regular Expression Searches</div><div class="selected">REGEX Cheat Sheet</div></div>
             </div>
 
-            <div class="search-dialog" id="helpDialogUnified" style="display:none;">
+            <div class="search-dialog" id="helpDialogUnified" style="display: none;">
               <input id="helpFilter" type="text" placeholder="Filter help (Start with : to search keys only)...">
-              <div id="helpResults" class="search-results"></div>
+              <div id="helpResults" class="search-results"><div><b>#</b> <span class="dim">(TREE) - </span>Show note links dialog</div><div><b>X</b> <span class="dim">(TREE) - </span>Show broken note links</div><div><b>Control+'</b> <span class="dim">(INSERT) - </span>Insert Link</div></div>
               <p><a href="https://scribboleth.infinityfreeapp.com/" target="_blank">Full Help System</a></p>
               <p style="margin-top:6px;">Press ESC to close.</p>
             </div>
 
             <div id="linksDialog" ondblclick="closeLinksDialog();" style="display: none;">
                 <h3>Links in Note</h3>
-                <div id="linksList"><a href="#" data-node-id="kqr4o4g3" class="selected">The Options Dialog</a></div>
+                <div id="linksList"><a href="#" data-node-id="7ooc8801" class="selected">REGEX Cheat Sheet</a></div>
             </div>
 
             <div id="marksDialog" style="display: none;">
@@ -689,7 +689,7 @@
                 </p>
             </div>
 
-            <div id="replaceDialog" style="display: none;">
+            <div id="replaceDialog" style="display: none; top: 15%; left: 5px; width: 230px;">
                 <h3>Find<span id="ttlReplace"> &amp; Replace<span></span></span></h3>
                 <label id="lblFind" for="searchText">Find</label>
                 <input id="searchText" type="text">
@@ -708,7 +708,7 @@
             <div id="historyDialog" style="display: none;">
                 <h3>History</h3>
                 <div class="history-content">
-                    <div id="historyList"></div>
+                    <div id="historyList"><div class="selected" style="background: var(--sel-bg);">REGEX Cheat Sheet</div><div>Regular Expression Searches</div><div>Notes</div><div>Other Translations</div><div>Adding New Translations</div><div>Tome Well</div><div>Default Translation</div></div>
                 </div>
             </div>
 
@@ -723,9 +723,9 @@
                 <p style="color:var(--dim); font-size:0.9em;">Press Enter to save, Esc to cancel.</p>
             </div>
 
-            <div id="versionDialog" class="search-dialog" style="display:none;width:300px;max-width:90vw;">
+            <div id="versionDialog" class="search-dialog" style="display: none; width: 300px; max-width: 90vw;">
                 <h3>Version</h3>
-                <p>Current Version: <span id="versionNumber"></span></p>
+                <p>Current Version: <span id="versionNumber">1.0.6</span></p>
             </div>
 
             <div id="themePickerDialog" class="search-dialog" style="display:none;width:350px;max-width:90vw;">
@@ -735,12 +735,12 @@
             </div>
 
 
-            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Tome Well</span></div></li><li><div class="node selected"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Features</span></div></li></ul></aside>
+            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Tome Well</span></div></li><li><div class="node"><span class="twisty"><svg width="10" height="10" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><path d="M1 3 L5 7 L9 3 Z" fill="currentColor"></path></svg></span><span class="title">Features</span></div><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Default Translation</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Other Translations</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Notes</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Regular Expression Searches</span></div></li></ul></li><li><div class="node"><span class="twisty"><svg width="10" height="10" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><path d="M1 3 L5 7 L9 3 Z" fill="currentColor"></path></svg></span><span class="title">Advanced</span></div><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Adding New Translations</span></div></li><li><div class="node selected"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">REGEX Cheat Sheet</span></div></li></ul></li></ul></aside>
             <section class="editor">
                 <div id="statusBar" class="status" onclick="closeDialogs();" ondblclick="toggleMobileMenu();" title="Double click to toggle Mobile Mode">
                     <span class="pill" id="mode" style="display: block;">TREE</span>
-                    <span class="pill" id="kind">FOLDER</span>
-                    <span class="dim" id="path">/</span>
+                    <span class="pill" id="kind">NOTE</span>
+                    <span class="dim" id="path">/Advanced</span>
                     <span class="pill" id="msg"></span>
                 </div>
                 <textarea id="editorArea" spellcheck="false" class="" readonly="readonly"></textarea>
@@ -763,23 +763,98 @@
   {
     "id": "ig7cwz7v",
     "title": "Tome Well",
-    "content": "Tome Well\n\nTomewell is an advanced Bible study and research tool that is open-source and available for Linux as well as Windows.\n\nIts interface is flexible and powerful. YOU can decide what tools you want to see and how you want them laid out. AND the next time you launch Tomewell, your layout will be restored just as you had defined it.",
+    "content": "Tome Well\n\nTomewell is an advanced Bible study and research tool that is open-source and available for Linux as well as Windows.\n\nIts interface is flexible and powerful. YOU can decide what tools you want to see and how you want them laid out. AND the next time you launch Tomewell, your layout will be restored just as you had defined it.\n\n__| Translations |__\n\nWhen Tomewell is launched a window is displayed using the _Default Translation_ however you can add any number of other translations.\nTo do so, see: _Adding New Translations_",
     "children": [],
-    "expanded": true
+    "expanded": false
   },
   {
     "id": "igs2yhxb",
     "title": "Features",
     "content": "",
-    "children": [],
+    "children": [
+      {
+        "id": "42rdwy62",
+        "title": "Default Translation",
+        "content": "Default Translation\n\nTomewell displays a default translation when you launch it for the first time. This translation is the American Standard Version.\nThis is an open source translation.\n\nYou can change this using the drop down list in the Main Translation window.\n\nNote:\nIt is possible to add other translations, to see how you can do this see _Adding New Translations_",
+        "children": [],
+        "expanded": false
+      },
+      {
+        "id": "w7476ikx",
+        "title": "Other Translations",
+        "content": "Other Translations\n\nTomewell allows you to add whatever translation you like. See:\n\n_Adding New Translations_",
+        "children": [],
+        "expanded": true
+      },
+      {
+        "id": "4apemz2d",
+        "title": "Notes",
+        "content": "Notes\n\nTomewell has a notes tool that allows you to create notes either on a chapter level or a specific verse level.\nTo do this, first display the notes window:\n\nFile > Show Notes\n\nThen you can position that window however you like.\n\nNavigate to either the chapter or the verse you want to add a note to - Type the note text you want.\n\nTo clear notes, simply select all of the note text and delete it, then hit:\n\n\nCtrl+S to save the notes update.",
+        "children": [],
+        "expanded": true
+      },
+      {
+        "id": "cjz8i13b",
+        "title": "Regular Expression Searches",
+        "content": "Regular Expression Searches\n\nUsing Ctrl+F you can search the defualt translation AND any other translation windows that are open.\n\nBUT!!\n\nYou can significantly increase the power of your Bible searches by adding a prefix to your search:\n\nr:\n\nIf your search begins with: r:  - this will allow you to use a Regular Expression (REGEX) for your search.\n\nTo reference the power of REGEX, see:\n\n_REGEX Cheat Sheet_",
+        "children": [],
+        "expanded": false
+      }
+    ],
+    "expanded": true
+  },
+  {
+    "id": "he39ekz2",
+    "title": "Advanced",
+    "content": "",
+    "children": [
+      {
+        "id": "kjgogbro",
+        "title": "Adding New Translations",
+        "content": "Adding New Translations\n\nTome Well looks in the <app dir>/translations/\ndirectory to find its Bible databases.\n\nThese data files are comma separated text files (.csv).\n\nThe format of these files are:\n<testament (1=Old Testament, 2=New testament)>,<book id>,<chapter id>,<verse number>,<book name>,<verse text>\n\nTome Well provides a Python script to help import other translations.\n~/translations/process_csv.py\n\nThis script assumes that you have found a .csv file in the format:\n<book name>,<chapter number>,<verse number>,<verse text>\n\n\nRegardless...\n\nAny translation you want to add needs to be a .csv file with the following format:\n<testament (1=Old Testament, 2=New testament)>,<book id>,<chapter id>,<verse number>,<book name>,<verse text>\n\nAnd you want to place that file in:\n<Tomewell folder>/translations/done/\n\n--------------------------------------------------------------------------------\n\nWhen the build.sh, build_windows.sh, or build_win32.bat\n\nscripts are called, the .csv files in ~/translations/done/\n\nare copied to the application's directory, in:\n\n<app>/translations/",
+        "children": [],
+        "expanded": false
+      },
+      {
+        "id": "7ooc8801",
+        "title": "REGEX Cheat Sheet",
+        "content": "REGEX Cheat Sheet\n\nPrefix your search query with r: to use regex.\n\n__| Regex Reference Cheat Sheet |__\n\nBASIC MATCHING\ncat\nFind text cat\n\n(\"cat|dog\")\nFind cat OR dog\n\nANY CHARACTER\nc.t\nMatches:\n    cat\n    cut\n    c9t\n\nCHARACTER TYPES\n\\d\nAny digit\nExample: 5\n\n\\w\nAny letter, number, or _\nExample: abc_123\"\\^^^func^^^\n\nAny whitespace\nExample: space or tab\n\\\n[abc]\\\nMatch a, b, or c\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"[a-z]\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Any lowercase letter\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"[A-Z]\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Any uppercase letter\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"[0-9]\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Any number\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"REPEATING\"\\^^^func^^^\n                ImGui::TextDisabled(\"*\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Zero or more\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"+\"\\^^^func^^^\n                ImGui::TextDisabled(\"  One or more\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"?\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Optional\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Examples:\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\d+\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Any number\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"a+\"\\^^^func^^^\n                ImGui::TextDisabled(\"  a, aa, aaa\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\w{5}\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Exactly 5 characters\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\d{2,4}\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Between 2 and 4 digits\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"LINE MATCHING\"\\^^^func^^^\n                ImGui::TextDisabled(\"^text\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Starts with text\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"text$\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Ends with \\\"text\\\"\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"^\\\\d+$\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Entire line must be numbers\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"COMMON SEARCHES\"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\d+\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find numbers\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\bword\\\\b\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find whole word only\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"(error|warning|fatal)\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find any of these words\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\.\\\\w+$\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find file extensions\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"https?://\\\\S+\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find URLs\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"^\\\\s*$\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find blank lines\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"ESCAPING SPECIAL CHARACTERS\"\\^^^func^^^\n                ImGui::TextDisabled(\"Special characters:\"\\^^^func^^^\n                ImGui::TextDisabled(\". ^ $ * + ? ( ) [ ] { } \\\\ |\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Use \\\\ to search them literally.\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Example:\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\.\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find a period\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\(\"\\^^^func^^^\n                ImGui::TextDisabled(\"  Find (\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"TIPS\"\\^^^func^^^\n                ImGui::TextDisabled(\".   = any character\"\\^^^func^^^\n                ImGui::TextDisabled(\"*   = zero or more\"\\^^^func^^^\n                ImGui::TextDisabled(\"+   = one or more\"\\^^^func^^^\n                ImGui::TextDisabled(\"?   = optional\"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\d  = digit\"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\w  = word character\"\\^^^func^^^\n                ImGui::TextDisabled(\"\\\\s  = whitespace\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Regex is usually case-sensitive.\"\\^^^func^^^\n                ImGui::TextDisabled(\"Start simple and build from there.\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::Separator(\\^^^func^^^\n                ImGui::TextDisabled(\"Example:   r:\\\\d+\"\\^^^func^^^\n                ImGui::TextDisabled(\"Finds verses containing one or more digits.\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Example:   r:and|or\"\\^^^func^^^\n                ImGui::TextDisabled(\"Finds verses containing \\\\\\\"and\\\" or \\\"or\\\".\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Example:   r:^Blessed\"\\^^^func^^^\n                ImGui::TextDisabled(\"Finds verses starting with \\\\\\\"Blessed\\\\\\\".\"\\^^^func^^^\n                ImGui::TextDisabled(\" \"\\^^^func^^^\n                ImGui::TextDisabled(\"Example:   r:blessed$\"\\^^^func^^^\n                ImGui::TextDisabled(\"Finds verses ending with \\\\\\\"blessed\\\\\\\".\"\\^^^func^^^\n",
+        "children": [],
+        "expanded": false
+      }
+    ],
     "expanded": true
   }
 ];
             let bookmarks = [];
             let historyStack = [
     {
+        "id": "42rdwy62",
+        "title": "Default Translation"
+    },
+    {
         "id": "ig7cwz7v",
         "title": "Tome Well"
+    },
+    {
+        "id": "kjgogbro",
+        "title": "Adding New Translations"
+    },
+    {
+        "id": "w7476ikx",
+        "title": "Other Translations"
+    },
+    {
+        "id": "4apemz2d",
+        "title": "Notes"
+    },
+    {
+        "id": "cjz8i13b",
+        "title": "Regular Expression Searches"
+    },
+    {
+        "id": "7ooc8801",
+        "title": "REGEX Cheat Sheet"
     }
 ];
 
