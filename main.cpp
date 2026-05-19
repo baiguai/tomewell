@@ -10,6 +10,7 @@
 #include "main.h"
 #include "tinyfiledialogs.h"
 #include <ctime>
+#include <cstdlib>
 #include <regex>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -278,7 +279,7 @@ static const std::vector<TestamentInfo>& get_translation(const std::string& name
     auto it = s_trans_cache.find(name);
     if (it == s_trans_cache.end())
     {
-        auto data = load_translation(exe_dir() + "/translations/done/" + name + ".csv");
+        auto data = load_translation(exe_dir() + "/translations/" + name + ".csv");
         it = s_trans_cache.emplace(name, std::move(data)).first;
     }
     return it->second;
@@ -573,7 +574,7 @@ int main(int, char**)
     if (!g_translations_scanned)
     {
         g_translations_scanned = true;
-        DIR* dir = opendir((exe_dir() + "/translations/done").c_str());
+        DIR* dir = opendir((exe_dir() + "/translations").c_str());
         if (dir)
         {
             struct dirent* entry;
@@ -607,6 +608,7 @@ int main(int, char**)
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
     static bool show_history_dialog = false;
+    static bool show_special_search_dialog = false;
     static char search_buf[256] = "";
     static std::vector<SearchResult> search_results;
 
@@ -632,27 +634,35 @@ int main(int, char**)
         FILE* f = fopen(state_path.c_str(), "r");
         if (f)
         {
-            char buf[256];
-            if (fgets(buf, sizeof(buf), f))
+            char buf[1024];
+            std::string section;
+            while (fgets(buf, sizeof(buf), f))
             {
                 buf[strcspn(buf, "\r\n")] = 0;
-                if (strlen(buf) > 0) def_translat = buf;
-            }
-            for (int i = 0; i < 16; i++)
-            {
-                if (fgets(buf, sizeof(buf), f))
+                if (strlen(buf) == 0) continue;
+                if (buf[0] == '[')
                 {
-                    int open = 0;
-                    char trans[64] = "";
-                    sscanf(buf, "%d %63s", &open, trans);
-                    translation_windows[i].open = (open != 0);
-                    translation_windows[i].translation = (strlen(trans) > 0) ? trans : "asv";
+                    section = buf;
+                    continue;
                 }
-            }
-            // Try to read nav state (17th line: book chapter verse)
-            {
-                char buf[64];
-                if (fgets(buf, sizeof(buf), f))
+                if (section == "[default_translation]")
+                {
+                    if (strlen(buf) > 0) def_translat = buf;
+                }
+                else if (section.find("[translation_window") == 0)
+                {
+                    int idx = 0;
+                    sscanf(section.c_str(), "[translation_window%d]", &idx);
+                    if (idx >= 0 && idx < 16)
+                    {
+                        int open = 0;
+                        char trans[64] = "";
+                        sscanf(buf, "%d %63s", &open, trans);
+                        translation_windows[idx].open = (open != 0);
+                        translation_windows[idx].translation = (strlen(trans) > 0) ? trans : "asv";
+                    }
+                }
+                else if (section == "[navigation]")
                 {
                     int b = 0, c = 0, v = 0;
                     if (sscanf(buf, "%d %d %d", &b, &c, &v) >= 2)
@@ -662,45 +672,29 @@ int main(int, char**)
                         nav_verse = (v > 0) ? v : -1;
                     }
                 }
-                // Try to read notes visibility (18th line: 0 or 1)
+                else if (section == "[show_notes]")
                 {
-                    char buf[16];
-                    if (fgets(buf, sizeof(buf), f))
-                    {
-                        int n = 0;
-                        if (sscanf(buf, "%d", &n) == 1)
-                            show_notes = (n != 0);
-                    }
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_notes = (n != 0);
                 }
-                // Try to read notes explorer visibility (19th line: 0 or 1)
+                else if (section == "[show_notes_explorer]")
                 {
-                    char buf[16];
-                    if (fgets(buf, sizeof(buf), f))
-                    {
-                        int n = 0;
-                        if (sscanf(buf, "%d", &n) == 1)
-                            show_notes_explorer = (n != 0);
-                    }
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_notes_explorer = (n != 0);
                 }
-                // Try to read data file path
+                else if (section == "[data_path]")
                 {
-                    char buf[1024];
-                    if (fgets(buf, sizeof(buf), f))
-                    {
-                        buf[strcspn(buf, "\r\n")] = 0;
-                        if (strlen(buf) > 0)
-                            g_data_path = buf;
-                    }
+                    if (strlen(buf) > 0) g_data_path = buf;
                 }
-                // Try to read notes explorer visibility (19th line: 0 or 1)
+                else if (section == "[show_menu]")
                 {
-                    char buf[16];
-                    if (fgets(buf, sizeof(buf), f))
-                    {
-                        int n = 0;
-                        if (sscanf(buf, "%d", &n) == 1)
-                            show_menu = (n != 0);
-                    }
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_menu = (n != 0);
+                }
+                else if (section == "[show_history]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_history_dialog = (n != 0);
                 }
             }
             fclose(f);
@@ -720,6 +714,12 @@ int main(int, char**)
     }
 
     // Main loop
+#ifndef __EMSCRIPTEN__
+    {
+        static std::string ini_path = exe_dir() + "/imgui.ini";
+        io.IniFilename = ini_path.c_str();
+    }
+#endif
 #ifdef __EMSCRIPTEN__
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
     // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
@@ -765,6 +765,9 @@ int main(int, char**)
                     char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
                     he.label = lbl;
                 }
+                for (int j = (int)nav_history.size() - 1; j >= 0; j--)
+                    if (nav_history[j].book == he.book && nav_history[j].chapter == he.chapter && nav_history[j].verse == he.verse)
+                        nav_history.erase(nav_history.begin() + j);
                 nav_history.push_back(he);
                 prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
                 nav_history_first = false;
@@ -785,6 +788,9 @@ int main(int, char**)
                     char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
                     he.label = lbl;
                 }
+                for (int j = (int)nav_history.size() - 1; j >= 0; j--)
+                    if (nav_history[j].book == he.book && nav_history[j].chapter == he.chapter && nav_history[j].verse == he.verse)
+                        nav_history.erase(nav_history.begin() + j);
                 nav_history.push_back(he);
                 prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
             }
@@ -1028,9 +1034,32 @@ int main(int, char**)
                     nav_chapter = 1;
                     nav_verse = -1;
                     show_notes = false;
+                    show_notes_explorer = false;
+                    show_search = false;
+                    show_bookmarks_dialog = false;
+                    show_history_dialog = false;
+
                     g_data_path = exe_dir() + "/notes.json";
                     remove((exe_dir() + "/tomewell_state.ini").c_str());
                     reset_layout = true;
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Help"))
+            {
+                if (ImGui::MenuItem("Tomewell Help"))
+                {
+                    std::string help_path = exe_dir() + "/tomewell_help.html";
+#ifdef _WIN32
+                    std::string cmd = "start \"\" \"" + help_path + "\"";
+#else
+                    std::string cmd = "xdg-open \"" + help_path + "\"";
+#endif
+                    system(cmd.c_str());
+                }
+                if (ImGui::MenuItem("Special Search Commands"))
+                {
+                    show_special_search_dialog = true;
                 }
                 ImGui::EndMenu();
             }
@@ -1064,7 +1093,7 @@ int main(int, char**)
         if (reset_layout)
         {
             reset_layout = false;
-            remove("imgui.ini");
+            remove((exe_dir() + "/imgui.ini").c_str());
             ImGui::ClearIniSettings();
         }
 
@@ -1090,6 +1119,7 @@ int main(int, char**)
             if (!translation_windows[i].open) continue;
             char name[64];
             snprintf(name, sizeof(name), "Other Translation##%d", i);
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin(name, &translation_windows[i].open);
 
             if (ImGui::BeginCombo("##trans", translation_windows[i].translation.c_str()))
@@ -1316,6 +1346,7 @@ int main(int, char**)
                 }
             }
 
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Notes Editor", &show_notes);
             {
                 ImGui::TextDisabled("%s", g_data_path.c_str());
@@ -1341,6 +1372,7 @@ int main(int, char**)
             if (g_notes_tree_dirty)
                 rebuild_notes_tree(notes_tree_data);
 
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Notes Explorer", &show_notes_explorer);
             {
                 for (auto& t : g_notes_tree)
@@ -1466,6 +1498,30 @@ int main(int, char**)
                     ImGui::TextDisabled("No bookmarks yet.");
                     ImGui::TextDisabled("Navigate to a verse and press Ctrl+D to bookmark it.");
                 }
+            }
+            ImGui::End();
+        }
+
+        if (show_special_search_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Special Search Commands", &show_special_search_dialog);
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                show_special_search_dialog = false;
+            {
+                ImGui::TextDisabled("Prefix your search query with \"r:\" to use regex.");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:\\d+");
+                ImGui::Text("Finds verses containing one or more digits.");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:and|or");
+                ImGui::Text("Finds verses containing \"and\" or \"or\".");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:^Blessed");
+                ImGui::Text("Finds verses starting with \"Blessed\".");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:blessed$");
+                ImGui::Text("Finds verses ending with \"blessed\".");
             }
             ImGui::End();
         }
@@ -1662,16 +1718,19 @@ int main(int, char**)
         FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
         if (f)
         {
-            fprintf(f, "%s\n", def_translat.c_str());
+            fprintf(f, "[default_translation]\n%s\n", def_translat.c_str());
             for (int i = 0; i < 16; i++)
             {
-                fprintf(f, "%d %s\n", translation_windows[i].open ? 1 : 0, translation_windows[i].translation.c_str());
+                fprintf(f, "[translation_window%d]\n%d %s\n", i,
+                    translation_windows[i].open ? 1 : 0,
+                    translation_windows[i].translation.c_str());
             }
-            fprintf(f, "%d %d %d\n", nav_book, nav_chapter, nav_verse);
-            fprintf(f, "%d\n", show_notes ? 1 : 0);
-            fprintf(f, "%d\n", show_notes_explorer ? 1 : 0);
-            fprintf(f, "%s\n", g_data_path.c_str());
-            fprintf(f, "%d\n", show_menu ? 1 : 0);
+            fprintf(f, "[navigation]\n%d %d %d\n", nav_book, nav_chapter, nav_verse);
+            fprintf(f, "[show_notes]\n%d\n", show_notes ? 1 : 0);
+            fprintf(f, "[show_notes_explorer]\n%d\n", show_notes_explorer ? 1 : 0);
+            fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
+            fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
+            fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
             fclose(f);
         }
     }
