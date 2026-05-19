@@ -1268,6 +1268,7 @@ int main(int, char**)
         // Navigation history dialog
         if (show_history_dialog)
         {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Navigation History", &show_history_dialog);
             {
                 ImGui::Text("%zu entries", nav_history.size());
@@ -1422,6 +1423,7 @@ int main(int, char**)
         // Bookmarks dialog
         if (show_bookmarks_dialog)
         {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Bookmarks", &show_bookmarks_dialog);
             if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
                 show_bookmarks_dialog = false;
