@@ -1167,6 +1167,7 @@ int main(int, char**)
         if (show_search)
         {
             ImGui::SetNextWindowSize(ImVec2(560, 440), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin("Search Bible", &show_search))
             {
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape))
@@ -1298,6 +1299,7 @@ int main(int, char**)
         // Navigation history dialog
         if (show_history_dialog)
         {
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Navigation History", &show_history_dialog);
             {
@@ -1372,6 +1374,7 @@ int main(int, char**)
             if (g_notes_tree_dirty)
                 rebuild_notes_tree(notes_tree_data);
 
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Notes Explorer", &show_notes_explorer);
             {
@@ -1504,6 +1507,7 @@ int main(int, char**)
 
         if (show_special_search_dialog)
         {
+            ImGui::SetNextWindowBgAlpha(1.0f);
             ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
             ImGui::Begin("Special Search Commands", &show_special_search_dialog);
             if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
@@ -1511,17 +1515,138 @@ int main(int, char**)
             {
                 ImGui::TextDisabled("Prefix your search query with \"r:\" to use regex.");
                 ImGui::Separator();
-                ImGui::Text("Example:   r:\\d+");
-                ImGui::Text("Finds verses containing one or more digits.");
+                ImGui::TextDisabled("BASIC MATCHING");
+                ImGui::TextDisabled("cat");
+                ImGui::TextDisabled("  Find text cat");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("cat|dog");
+                ImGui::TextDisabled("  Find cat OR dog");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("ANY CHARACTER");
+                ImGui::TextDisabled("c.t");
+                ImGui::TextDisabled("  Matches:");
+                ImGui::TextDisabled("    cat");
+                ImGui::TextDisabled("    cut");
+                ImGui::TextDisabled("    c9t");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("CHARACTER TYPES");
+                ImGui::TextDisabled("\\d");
+                ImGui::TextDisabled("  Any digit");
+                ImGui::TextDisabled("  Example: 5");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\w");
+                ImGui::TextDisabled("  Any letter, number, or _");
+                ImGui::TextDisabled("  Example: abc_123");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\s");
+                ImGui::TextDisabled("  Any whitespace");
+                ImGui::TextDisabled("  Example: space or tab");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("[abc]");
+                ImGui::TextDisabled("  Match a, b, or c");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("[a-z]");
+                ImGui::TextDisabled("  Any lowercase letter");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("[A-Z]");
+                ImGui::TextDisabled("  Any uppercase letter");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("[0-9]");
+                ImGui::TextDisabled("  Any number");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("REPEATING");
+                ImGui::TextDisabled("*");
+                ImGui::TextDisabled("  Zero or more");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("+");
+                ImGui::TextDisabled("  One or more");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("?");
+                ImGui::TextDisabled("  Optional");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Examples:");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\d+");
+                ImGui::TextDisabled("  Any number");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("a+");
+                ImGui::TextDisabled("  a, aa, aaa");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\w{5}");
+                ImGui::TextDisabled("  Exactly 5 characters");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\d{2,4}");
+                ImGui::TextDisabled("  Between 2 and 4 digits");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("LINE MATCHING");
+                ImGui::TextDisabled("^text");
+                ImGui::TextDisabled("  Starts with text");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("text$");
+                ImGui::TextDisabled("  Ends with \"text\"");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("^\\d+$");
+                ImGui::TextDisabled("  Entire line must be numbers");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("COMMON SEARCHES");
+                ImGui::TextDisabled("\\d+");
+                ImGui::TextDisabled("  Find numbers");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\bword\\b");
+                ImGui::TextDisabled("  Find whole word only");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("(error|warning|fatal)");
+                ImGui::TextDisabled("  Find any of these words");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\.\\w+$");
+                ImGui::TextDisabled("  Find file extensions");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("https?://\\S+");
+                ImGui::TextDisabled("  Find URLs");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("^\\s*$");
+                ImGui::TextDisabled("  Find blank lines");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("ESCAPING SPECIAL CHARACTERS");
+                ImGui::TextDisabled("Special characters:");
+                ImGui::TextDisabled(". ^ $ * + ? ( ) [ ] { } \\ |");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Use \\ to search them literally.");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Example:");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\.");
+                ImGui::TextDisabled("  Find a period");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("\\(");
+                ImGui::TextDisabled("  Find (");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("TIPS");
+                ImGui::TextDisabled(".   = any character");
+                ImGui::TextDisabled("*   = zero or more");
+                ImGui::TextDisabled("+   = one or more");
+                ImGui::TextDisabled("?   = optional");
+                ImGui::TextDisabled("\\d  = digit");
+                ImGui::TextDisabled("\\w  = word character");
+                ImGui::TextDisabled("\\s  = whitespace");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Regex is usually case-sensitive.");
+                ImGui::TextDisabled("Start simple and build from there.");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled(" ");
                 ImGui::Separator();
-                ImGui::Text("Example:   r:and|or");
-                ImGui::Text("Finds verses containing \"and\" or \"or\".");
-                ImGui::Separator();
-                ImGui::Text("Example:   r:^Blessed");
-                ImGui::Text("Finds verses starting with \"Blessed\".");
-                ImGui::Separator();
-                ImGui::Text("Example:   r:blessed$");
-                ImGui::Text("Finds verses ending with \"blessed\".");
+                ImGui::TextDisabled("Example:   r:\\d+");
+                ImGui::TextDisabled("Finds verses containing one or more digits.");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Example:   r:and|or");
+                ImGui::TextDisabled("Finds verses containing \\\"and\" or \"or\".");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Example:   r:^Blessed");
+                ImGui::TextDisabled("Finds verses starting with \\\"Blessed\\\".");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("Example:   r:blessed$");
+                ImGui::TextDisabled("Finds verses ending with \\\"blessed\\\".");
             }
             ImGui::End();
         }
