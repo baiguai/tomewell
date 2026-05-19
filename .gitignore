@@ -40,9 +40,17 @@
 *.app
 
 # Build directories
+*.ini
 build/
 Build/
 build-*/
+translations/
+backups/
+node_modules/
+package-lock.json
+package.json
+svr_tomewell_help.js
+
 
 # CMake generated files
 CMakeFiles/
