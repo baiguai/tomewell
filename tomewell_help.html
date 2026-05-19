@@ -1,7 +1,7 @@
 <!DOCTYPE html><html><head>
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1" name="viewport">
-<title>Scribboleth</title>
+<title>Tomewell Help</title>
 
 <!--
 
@@ -735,15 +735,15 @@
             </div>
 
 
-            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul></ul></aside>
+            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Tome Well</span></div></li><li><div class="node selected"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Features</span></div></li></ul></aside>
             <section class="editor">
                 <div id="statusBar" class="status" onclick="closeDialogs();" ondblclick="toggleMobileMenu();" title="Double click to toggle Mobile Mode">
                     <span class="pill" id="mode" style="display: block;">TREE</span>
-                    <span class="pill" id="kind">—</span>
+                    <span class="pill" id="kind">FOLDER</span>
                     <span class="dim" id="path">/</span>
                     <span class="pill" id="msg"></span>
                 </div>
-                <textarea id="editorArea" spellcheck="false" readonly="readonly" class=""></textarea>
+                <textarea id="editorArea" spellcheck="false" class="" readonly="readonly"></textarea>
             </section>
             </div>
 
@@ -759,9 +759,29 @@
             /** @typedef {{ id:string, title:string, content:string, children:NodeT[], expanded:boolean }} NodeT */
 
             /** @type {NodeT[]} */
-            let treeData = [];
+            let treeData = [
+  {
+    "id": "ig7cwz7v",
+    "title": "Tome Well",
+    "content": "Tome Well\n\nTomewell is an advanced Bible study and research tool that is open-source and available for Linux as well as Windows.\n\nIts interface is flexible and powerful. YOU can decide what tools you want to see and how you want them laid out. AND the next time you launch Tomewell, your layout will be restored just as you had defined it.",
+    "children": [],
+    "expanded": true
+  },
+  {
+    "id": "igs2yhxb",
+    "title": "Features",
+    "content": "",
+    "children": [],
+    "expanded": true
+  }
+];
             let bookmarks = [];
-            let historyStack = [];
+            let historyStack = [
+    {
+        "id": "ig7cwz7v",
+        "title": "Tome Well"
+    }
+];
 
             // !@!
             const readOnly = false;
@@ -5380,6 +5400,7 @@
                 }, 3000);                               // wait 3s after last change
             }
 </script>
+
 
 
 </body></html>
