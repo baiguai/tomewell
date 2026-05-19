@@ -1043,7 +1043,6 @@ int main(int, char**)
                     show_search = false;
                     show_bookmarks_dialog = false;
                     show_history_dialog = false;
-                    show_bookmarks_dialog = false;
 
                     g_data_path = exe_dir() + "/notes.json";
                     remove((exe_dir() + "/tomewell_state.ini").c_str());
@@ -1491,7 +1490,6 @@ int main(int, char**)
                         nav_verse = e.verse;
                         g_tree_inited = false;
                         g_scroll_to_verse = true;
-                        show_bookmarks_dialog = false;
                     }
                     ImGui::SameLine();
                     char del_id[32];
