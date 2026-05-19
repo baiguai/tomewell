@@ -1634,15 +1634,17 @@ int main(int, char**)
                 ImGui::TextDisabled("Regex is usually case-sensitive.");
                 ImGui::TextDisabled("Start simple and build from there.");
                 ImGui::TextDisabled(" ");
+                ImGui::TextDisabled(" ");
+                ImGui::Separator();
                 ImGui::TextDisabled("Example:   r:\\d+");
                 ImGui::TextDisabled("Finds verses containing one or more digits.");
-                ImGui::Separator();
+                ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("Example:   r:and|or");
                 ImGui::TextDisabled("Finds verses containing \\\"and\" or \"or\".");
-                ImGui::Separator();
+                ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("Example:   r:^Blessed");
                 ImGui::TextDisabled("Finds verses starting with \\\"Blessed\\\".");
-                ImGui::Separator();
+                ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("Example:   r:blessed$");
                 ImGui::TextDisabled("Finds verses ending with \\\"blessed\\\".");
             }
