@@ -136,6 +136,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
     while (std::getline(file, line))
     {
         if (line.empty()) continue;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
 
         std::vector<std::string> fields;
         std::string f;
@@ -206,6 +207,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 
 static std::string g_highlight_query;
+static std::string g_regex_error;
 static bool g_tree_inited = false;
 static bool g_scroll_to_verse = false;
 static bool g_expand_all = false;
@@ -604,8 +606,14 @@ int main(int, char**)
     // Search state
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
+    static bool show_history_dialog = false;
     static char search_buf[256] = "";
     static std::vector<SearchResult> search_results;
+
+    // Navigation history
+    struct HistoryEntry { int book; int chapter; int verse; std::string label; };
+    static std::vector<HistoryEntry> nav_history;
+    static int prev_nav_book = 1, prev_nav_chapter = 1, prev_nav_verse = -1;
 
     // Extra windows
     struct ExtraWin { bool open = false; std::string translation = "asv"; };
@@ -738,6 +746,52 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Track navigation history
+        {
+            static bool nav_history_first = true;
+            if (nav_history_first)
+            {
+                HistoryEntry he;
+                he.book = nav_book; he.chapter = nav_chapter; he.verse = nav_verse;
+                const auto& hd = get_translation(def_translat);
+                const char* bn = book_name(hd, nav_book);
+                if (nav_verse >= 0)
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s %d:%d", bn, nav_chapter, nav_verse);
+                    he.label = lbl;
+                }
+                else
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
+                    he.label = lbl;
+                }
+                nav_history.push_back(he);
+                prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
+                nav_history_first = false;
+            }
+            if (nav_book != prev_nav_book || nav_chapter != prev_nav_chapter || nav_verse != prev_nav_verse)
+            {
+                HistoryEntry he;
+                he.book = nav_book; he.chapter = nav_chapter; he.verse = nav_verse;
+                const auto& hd = get_translation(def_translat);
+                const char* bn = book_name(hd, nav_book);
+                if (nav_verse >= 0)
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s %d:%d", bn, nav_chapter, nav_verse);
+                    he.label = lbl;
+                }
+                else
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
+                    he.label = lbl;
+                }
+                nav_history.push_back(he);
+                prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
+            }
+            if (nav_history.size() > 100)
+                nav_history.erase(nav_history.begin());
+        }
+
         // Key Handlers
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_Q))
         {
@@ -750,6 +804,10 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_F))
         {
             show_search = !show_search;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_H))
+        {
+            show_history_dialog = !show_history_dialog;
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
         {
@@ -943,6 +1001,10 @@ int main(int, char**)
                 {
                     show_search = true;
                 }
+                if (ImGui::MenuItem("Navigation History", "Ctrl+H"))
+                {
+                    show_history_dialog = true;
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Settings"))
@@ -1093,7 +1155,13 @@ int main(int, char**)
                     search_results.clear();
                 }
 
+                bool cur_is_regex = (strlen(search_buf) >= 2 && (search_buf[0] == 'r' || search_buf[0] == 'R') && search_buf[1] == ':');
                 ImGui::InputText("Query", search_buf, sizeof(search_buf));
+                if (cur_is_regex)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("[REGEX]");
+                }
                 {
                     static std::string prev_query;
                     std::string cur = search_buf;
@@ -1102,10 +1170,11 @@ int main(int, char**)
                         prev_query = cur;
                         search_results.clear();
                         g_highlight_query.clear();
+                        g_regex_error.clear();
                         if (!cur.empty())
                         {
                             const auto& data = get_translation(def_translat);
-                            bool is_regex = (cur.size() >= 2 && cur[0] == 'r' && cur[1] == ':');
+                            bool is_regex = (cur.size() >= 2 && (cur[0] == 'r' || cur[0] == 'R') && cur[1] == ':');
                             std::string raw_query = is_regex ? cur.substr(2) : cur;
                             g_highlight_query = raw_query;
                             if (is_regex)
@@ -1126,7 +1195,10 @@ int main(int, char**)
                                                     }
                                                 }
                                 }
-                                catch (...) {}
+                                catch (std::regex_error& e)
+                                {
+                                    g_regex_error = e.what();
+                                }
                             }
                             else
                             {
@@ -1182,13 +1254,41 @@ int main(int, char**)
                 }
                 else if (strlen(search_buf) > 0 && search_results.empty())
                 {
-                    ImGui::TextUnformatted("No results found.");
+                    if (!g_regex_error.empty())
+                        ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Regex error: %s", g_regex_error.c_str());
+                    else
+                        ImGui::TextUnformatted("No results found.");
                 }
             }
             ImGui::End();
         }
         if (!show_search)
             g_highlight_query.clear();
+
+        // Navigation history dialog
+        if (show_history_dialog)
+        {
+            ImGui::Begin("Navigation History", &show_history_dialog);
+            {
+                ImGui::Text("%zu entries", nav_history.size());
+                ImGui::Separator();
+                ImGui::BeginChild("##history", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                for (int i = (int)nav_history.size() - 1; i >= 0; i--)
+                {
+                    auto& h = nav_history[i];
+                    ImGui::PushID(i);
+                    if (ImGui::Selectable(h.label.c_str()))
+                    {
+                        nav_book = h.book;
+                        nav_chapter = h.chapter;
+                        nav_verse = h.verse;
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndChild();
+            }
+            ImGui::End();
+        }
 
         // Notes editor
         if (show_notes)
