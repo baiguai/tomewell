@@ -1610,7 +1610,7 @@ int main(int, char**)
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("ESCAPING SPECIAL CHARACTERS");
                 ImGui::TextDisabled("Special characters:");
-                ImGui::TextDisabled(". ^ $ * + ? ( ) [ ] { } \ |");
+                ImGui::TextDisabled(". ^ $ * + ? ( ) [ ] { } \\ |");
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("Use \\ to search them literally.");
                 ImGui::TextDisabled(" ");
