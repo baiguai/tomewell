@@ -8,6 +8,10 @@
 // - Introduction, links and more at the top of imgui.cpp
 
 #include "main.h"
+#include "tinyfiledialogs.h"
+#include <ctime>
+#include <cstdlib>
+#include <regex>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -50,6 +54,71 @@ std::string exe_dir()
     return cached;
 }
 
+std::string timestamp()
+{
+    std::time_t t = std::time(nullptr);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", std::localtime(&t));
+    return buf;
+}
+
+std::vector<DataEntry> load_data_file(const std::string& path)
+{
+    std::vector<DataEntry> entries;
+    std::ifstream f(path);
+    if (!f.is_open()) return entries;
+    try
+    {
+        auto j = nlohmann::json::parse(f);
+        auto& arr = j["entries"];
+        for (auto& item : arr)
+        {
+            DataEntry e;
+            e.type = item.value("type", "note");
+            e.book_id = item.value("book", 0);
+            e.chapter = item.value("chapter", 0);
+            e.verse = item.value("verse", -1);
+            e.sel_start = item.value("sel_start", -1);
+            e.sel_end = item.value("sel_end", -1);
+            e.content = item.value("content", "");
+            e.created = item.value("created", "");
+            e.modified = item.value("modified", "");
+            entries.push_back(e);
+        }
+    }
+    catch (...) {}
+    return entries;
+}
+
+void save_data_file(const std::string& path, const std::vector<DataEntry>& entries)
+{
+    nlohmann::json j;
+    j["version"] = 1;
+    auto& arr = j["entries"];
+    for (auto& e : entries)
+    {
+        nlohmann::json item;
+        item["type"] = e.type;
+        item["book"] = e.book_id;
+        item["chapter"] = e.chapter;
+        item["verse"] = e.verse;
+        item["sel_start"] = e.sel_start;
+        item["sel_end"] = e.sel_end;
+        item["content"] = e.content;
+        item["created"] = e.created;
+        item["modified"] = e.modified;
+        arr.push_back(item);
+    }
+    std::ofstream f(path);
+    if (f.is_open()) f << j.dump(2) << "\n";
+}
+
+void create_default_data_file(const std::string& path)
+{
+    std::ofstream f(path);
+    if (f.is_open()) f << "{\n  \"version\": 1,\n  \"entries\": []\n}\n";
+}
+
 
 
 // Bible loading methods
@@ -68,6 +137,7 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
     while (std::getline(file, line))
     {
         if (line.empty()) continue;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
 
         std::vector<std::string> fields;
         std::string f;
@@ -137,17 +207,131 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 
 
+static std::string g_highlight_query;
+static std::string g_regex_error;
+static bool g_tree_inited = false;
+static bool g_scroll_to_verse = false;
+static bool g_expand_all = false;
+static bool g_collapse_all = false;
+static std::vector<DataEntry> g_data_entries;
+static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
+
+static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
+static int find_bookmark(const std::vector<DataEntry>& entries, int book, int chapter, int verse);
+
+struct NotesTreeVerse { int num; };
+struct NotesTreeChapter { int num; bool has_chapter_note; std::vector<NotesTreeVerse> verses; };
+struct NotesTreeBook { int id; std::string name; std::vector<NotesTreeChapter> chapters; };
+struct NotesTreeTestament { int num; std::string label; std::vector<NotesTreeBook> books; };
+static std::vector<NotesTreeTestament> g_notes_tree;
+static bool g_notes_tree_dirty = true;
+
+static void rebuild_notes_tree(const std::vector<TestamentInfo>& bible_data)
+{
+    g_notes_tree.clear();
+    for (auto& t : bible_data)
+    {
+        NotesTreeTestament ntt;
+        ntt.num = t.num;
+        ntt.label = t.label;
+        bool has_t = false;
+        for (auto& b : t.books)
+        {
+            NotesTreeBook ntb;
+            ntb.id = b.id;
+            ntb.name = b.name;
+            bool has_b = false;
+            for (auto& c : b.chapters)
+            {
+                NotesTreeChapter ntc;
+                ntc.num = c.num;
+                ntc.has_chapter_note = (find_entry(g_data_entries, b.id, c.num, -1) >= 0);
+                bool has_c = ntc.has_chapter_note;
+                for (auto& v : c.verses)
+                {
+                    if (find_entry(g_data_entries, b.id, c.num, v.num) >= 0)
+                    {
+                        ntc.verses.push_back({v.num});
+                        has_c = true;
+                    }
+                }
+                if (has_c)
+                {
+                    ntb.chapters.push_back(ntc);
+                    has_b = true;
+                }
+            }
+            if (has_b)
+            {
+                ntt.books.push_back(ntb);
+                has_t = true;
+            }
+        }
+        if (has_t)
+            g_notes_tree.push_back(ntt);
+    }
+    g_notes_tree_dirty = false;
+}
 
 static const std::vector<TestamentInfo>& get_translation(const std::string& name)
 {
     auto it = s_trans_cache.find(name);
     if (it == s_trans_cache.end())
     {
-        auto data = load_translation(exe_dir() + "/translations/done/" + name + ".csv");
+        auto data = load_translation(exe_dir() + "/translations/" + name + ".csv");
         it = s_trans_cache.emplace(name, std::move(data)).first;
     }
     return it->second;
+}
+
+static void render_highlighted_verse(int num, const std::string& text, const std::string& query)
+{
+    if (query.empty())
+    {
+        ImGui::TextWrapped("%d. %s", num, text.c_str());
+        return;
+    }
+
+    // Build lower case copies for matching
+    std::string lower_text, lower_query;
+    lower_text.reserve(text.size());
+    for (auto c : text) lower_text += (char)tolower((unsigned char)c);
+    for (auto c : query) lower_query += (char)tolower((unsigned char)c);
+
+    ImGui::Text("%d. ", num);
+    ImGui::SameLine(0, 0);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t pos = lower_text.find(lower_query, start);
+        if (pos == std::string::npos)
+        {
+            ImGui::TextUnformatted(text.c_str() + start);
+            break;
+        }
+
+        if (pos > start)
+        {
+            float py = ImGui::GetCursorPosY();
+            ImGui::TextUnformatted(text.c_str() + start, text.c_str() + pos);
+            if (ImGui::GetCursorPosY() == py)
+                ImGui::SameLine(0, 0);
+        }
+
+        float py = ImGui::GetCursorPosY();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f));
+        ImGui::TextUnformatted(text.c_str() + pos, text.c_str() + pos + query.size());
+        ImGui::PopStyleColor();
+        if (ImGui::GetCursorPosY() == py)
+            ImGui::SameLine(0, 0);
+
+        start = pos + query.size();
+    }
+
+    ImGui::PopTextWrapPos();
 }
 
 static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
@@ -178,15 +362,102 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                             ImGui::TextDisabled("%zu verses", c.verses.size());
                         else
                             ImGui::TextDisabled("Chapter %d : Verse %d", chapter, verse_num);
+                        ImGui::SameLine();
+                        bool bm = find_bookmark(g_data_entries, book_id, chapter, verse_num) >= 0;
+                        if (ImGui::SmallButton(bm ? "Unbookmark" : "Bookmark"))
+                        {
+                            int idx = find_bookmark(g_data_entries, book_id, chapter, verse_num);
+                            if (idx >= 0)
+                                g_data_entries.erase(g_data_entries.begin() + idx);
+                            else
+                            {
+                                DataEntry e;
+                                e.type = "bookmark";
+                                e.book_id = book_id;
+                                e.chapter = chapter;
+                                e.verse = verse_num;
+                                e.sel_start = -1;
+                                e.sel_end = -1;
+                                std::string ts = timestamp();
+                                e.created = ts;
+                                e.modified = ts;
+                                g_data_entries.push_back(e);
+                            }
+                        }
                         ImGui::BeginChild("##passage", ImVec2(-FLT_MIN, -FLT_MIN));
                         for (auto& v : c.verses)
                             if (verse_num == -1 || v.num == verse_num)
-                                ImGui::TextWrapped("%d. %s", v.num, v.text.c_str());
+                                render_highlighted_verse(v.num, v.text, g_highlight_query);
                         ImGui::EndChild();
                         return;
                     }
                 return;
             }
+}
+
+static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        auto& e = entries[i];
+        if (e.type == "note" && e.book_id == book && e.chapter == chapter && e.verse == verse)
+            return (int)i;
+    }
+    return -1;
+}
+
+static int find_bookmark(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        auto& e = entries[i];
+        if (e.type == "bookmark" && e.book_id == book && e.chapter == chapter && e.verse == verse)
+            return (int)i;
+    }
+    return -1;
+}
+
+static const char* book_name(const std::vector<TestamentInfo>& data, int id)
+{
+    for (auto& t : data)
+        for (auto& b : t.books)
+            if (b.id == id) return b.name.c_str();
+    return "Unknown";
+}
+
+static void flush_note(int book, int chapter, int verse, const char* buf)
+{
+    if (book < 0) return;
+    std::string content = buf;
+    int idx = find_entry(g_data_entries, book, chapter, verse);
+    if (content.empty())
+    {
+        if (idx >= 0) g_data_entries.erase(g_data_entries.begin() + idx);
+    }
+    else
+    {
+        std::string ts = timestamp();
+        if (idx >= 0)
+        {
+            g_data_entries[idx].content = content;
+            g_data_entries[idx].modified = ts;
+        }
+        else
+        {
+            DataEntry e;
+            e.type = "note";
+            e.book_id = book;
+            e.chapter = chapter;
+            e.verse = verse;
+            e.sel_start = -1;
+            e.sel_end = -1;
+            e.content = content;
+            e.created = ts;
+            e.modified = ts;
+            g_data_entries.push_back(e);
+        }
+    }
+    g_notes_tree_dirty = true;
 }
 
 // Main code
@@ -303,7 +574,7 @@ int main(int, char**)
     if (!g_translations_scanned)
     {
         g_translations_scanned = true;
-        DIR* dir = opendir((exe_dir() + "/translations/done").c_str());
+        DIR* dir = opendir((exe_dir() + "/translations").c_str());
         if (dir)
         {
             struct dirent* entry;
@@ -323,6 +594,29 @@ int main(int, char**)
     // Default translation for main window
     static std::string def_translat = "asv";
 
+    // Notes windows state
+    static bool show_notes = false;
+    static bool show_notes_explorer = false;
+    static char note_edit_buf[65536] = "";
+    static int note_book = -1;
+    static int note_chapter = -1;
+    static int note_verse = -1;
+
+    static const char* filters[] = {"*.json"};
+
+    // Search state
+    static bool show_search = false;
+    static bool show_bookmarks_dialog = false;
+    static bool show_history_dialog = false;
+    static bool show_special_search_dialog = false;
+    static char search_buf[256] = "";
+    static std::vector<SearchResult> search_results;
+
+    // Navigation history
+    struct HistoryEntry { int book; int chapter; int verse; std::string label; };
+    static std::vector<HistoryEntry> nav_history;
+    static int prev_nav_book = 1, prev_nav_chapter = 1, prev_nav_verse = -1;
+
     // Extra windows
     struct ExtraWin { bool open = false; std::string translation = "asv"; };
     static ExtraWin translation_windows[16];
@@ -340,29 +634,92 @@ int main(int, char**)
         FILE* f = fopen(state_path.c_str(), "r");
         if (f)
         {
-            char buf[256];
-            if (fgets(buf, sizeof(buf), f))
+            char buf[1024];
+            std::string section;
+            while (fgets(buf, sizeof(buf), f))
             {
                 buf[strcspn(buf, "\r\n")] = 0;
-                if (strlen(buf) > 0) def_translat = buf;
-            }
-            for (int i = 0; i < 16; i++)
-            {
-                if (fgets(buf, sizeof(buf), f))
+                if (strlen(buf) == 0) continue;
+                if (buf[0] == '[')
                 {
-                    int open = 0;
-                    char trans[64] = "";
-                    sscanf(buf, "%d %63s", &open, trans);
-                    translation_windows[i].open = (open != 0);
-                    translation_windows[i].translation = (strlen(trans) > 0) ? trans : "asv";
+                    section = buf;
+                    continue;
+                }
+                if (section == "[default_translation]")
+                {
+                    if (strlen(buf) > 0) def_translat = buf;
+                }
+                else if (section.find("[translation_window") == 0)
+                {
+                    int idx = 0;
+                    sscanf(section.c_str(), "[translation_window%d]", &idx);
+                    if (idx >= 0 && idx < 16)
+                    {
+                        int open = 0;
+                        char trans[64] = "";
+                        sscanf(buf, "%d %63s", &open, trans);
+                        translation_windows[idx].open = (open != 0);
+                        translation_windows[idx].translation = (strlen(trans) > 0) ? trans : "asv";
+                    }
+                }
+                else if (section == "[navigation]")
+                {
+                    int b = 0, c = 0, v = 0;
+                    if (sscanf(buf, "%d %d %d", &b, &c, &v) >= 2)
+                    {
+                        nav_book = b;
+                        nav_chapter = c;
+                        nav_verse = (v > 0) ? v : -1;
+                    }
+                }
+                else if (section == "[show_notes]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_notes = (n != 0);
+                }
+                else if (section == "[show_notes_explorer]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_notes_explorer = (n != 0);
+                }
+                else if (section == "[data_path]")
+                {
+                    if (strlen(buf) > 0) g_data_path = buf;
+                }
+                else if (section == "[show_menu]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_menu = (n != 0);
+                }
+                else if (section == "[show_history]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_history_dialog = (n != 0);
                 }
             }
             fclose(f);
         }
     }
 
+    // Load/create data file
+    {
+        if (g_data_path.empty())
+            g_data_path = exe_dir() + "/notes.json";
+        std::ifstream test(g_data_path);
+        if (!test.is_open())
+            create_default_data_file(g_data_path);
+        else
+            test.close();
+        g_data_entries = load_data_file(g_data_path);
+    }
 
     // Main loop
+#ifndef __EMSCRIPTEN__
+    {
+        static std::string ini_path = exe_dir() + "/imgui.ini";
+        io.IniFilename = ini_path.c_str();
+    }
+#endif
 #ifdef __EMSCRIPTEN__
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
     // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
@@ -389,6 +746,58 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Track navigation history
+        {
+            static bool nav_history_first = true;
+            if (nav_history_first)
+            {
+                HistoryEntry he;
+                he.book = nav_book; he.chapter = nav_chapter; he.verse = nav_verse;
+                const auto& hd = get_translation(def_translat);
+                const char* bn = book_name(hd, nav_book);
+                if (nav_verse >= 0)
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s %d:%d", bn, nav_chapter, nav_verse);
+                    he.label = lbl;
+                }
+                else
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
+                    he.label = lbl;
+                }
+                for (int j = (int)nav_history.size() - 1; j >= 0; j--)
+                    if (nav_history[j].book == he.book && nav_history[j].chapter == he.chapter && nav_history[j].verse == he.verse)
+                        nav_history.erase(nav_history.begin() + j);
+                nav_history.push_back(he);
+                prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
+                nav_history_first = false;
+            }
+            if (nav_book != prev_nav_book || nav_chapter != prev_nav_chapter || nav_verse != prev_nav_verse)
+            {
+                HistoryEntry he;
+                he.book = nav_book; he.chapter = nav_chapter; he.verse = nav_verse;
+                const auto& hd = get_translation(def_translat);
+                const char* bn = book_name(hd, nav_book);
+                if (nav_verse >= 0)
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s %d:%d", bn, nav_chapter, nav_verse);
+                    he.label = lbl;
+                }
+                else
+                {
+                    char lbl[256]; snprintf(lbl, sizeof(lbl), "%s Chapter %d", bn, nav_chapter);
+                    he.label = lbl;
+                }
+                for (int j = (int)nav_history.size() - 1; j >= 0; j--)
+                    if (nav_history[j].book == he.book && nav_history[j].chapter == he.chapter && nav_history[j].verse == he.verse)
+                        nav_history.erase(nav_history.begin() + j);
+                nav_history.push_back(he);
+                prev_nav_book = nav_book; prev_nav_chapter = nav_chapter; prev_nav_verse = nav_verse;
+            }
+            if (nav_history.size() > 100)
+                nav_history.erase(nav_history.begin());
+        }
+
         // Key Handlers
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_Q))
         {
@@ -397,6 +806,94 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_M))
         {
             show_menu = !show_menu;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_F))
+        {
+            show_search = !show_search;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_H))
+        {
+            show_history_dialog = !show_history_dialog;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
+        {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+            const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+            if (fp)
+            {
+                g_data_path = fp;
+                g_data_entries.clear();
+                note_edit_buf[0] = '\0';
+                note_book = note_chapter = note_verse = -1;
+                g_notes_tree_dirty = true;
+                save_data_file(g_data_path, g_data_entries);
+            }
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_N))
+        {
+            show_notes = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_X))
+        {
+            show_notes_explorer = true;
+        }
+
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_O))
+        {
+            const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+            if (fp)
+            {
+                flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                note_edit_buf[0] = '\0';
+                std::ifstream t(fp);
+                if (t.is_open())
+                {
+                    t.close();
+                    g_data_entries = load_data_file(fp);
+                    g_data_path = fp;
+                    note_book = note_chapter = note_verse = -1;
+                    g_notes_tree_dirty = true;
+                }
+            }
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_S))
+        {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+            save_data_file(g_data_path, g_data_entries);
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_D))
+        {
+            show_bookmarks_dialog = !show_bookmarks_dialog;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && !ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_D))
+        {
+            int idx = find_bookmark(g_data_entries, nav_book, nav_chapter, nav_verse);
+            if (idx >= 0)
+                g_data_entries.erase(g_data_entries.begin() + idx);
+            else
+            {
+                DataEntry e;
+                e.type = "bookmark";
+                e.book_id = nav_book;
+                e.chapter = nav_chapter;
+                e.verse = nav_verse;
+                e.sel_start = -1;
+                e.sel_end = -1;
+                std::string ts = timestamp();
+                e.created = ts;
+                e.modified = ts;
+                g_data_entries.push_back(e);
+            }
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_S))
+        {
+            flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+            const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+            if (fp)
+            {
+                g_data_path = fp;
+                save_data_file(g_data_path, g_data_entries);
+            }
         }
 
         // Create the main menu
@@ -411,14 +908,120 @@ int main(int, char**)
                         if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
-                if (ImGui::MenuItem("Quit"))
+                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
+                {
+                    show_notes = true;
+                }
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("New Database", "Ctrl+N"))
+                {
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                    const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+                    if (fp)
+                    {
+                        g_data_path = fp;
+                        g_data_entries.clear();
+                        note_edit_buf[0] = '\0';
+                        note_book = note_chapter = note_verse = -1;
+                        g_notes_tree_dirty = true;
+                        save_data_file(g_data_path, g_data_entries);
+                    }
+                }
+                if (ImGui::MenuItem("Open Database", "Ctrl+O"))
+                {
+                    const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+                    if (fp)
+                    {
+                        flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                        note_edit_buf[0] = '\0';
+                        std::ifstream t(fp);
+                        if (t.is_open())
+                        {
+                            t.close();
+                            g_data_entries = load_data_file(fp);
+                            g_data_path = fp;
+                            note_book = note_chapter = note_verse = -1;
+                            g_notes_tree_dirty = true;
+                        }
+                    }
+                }
+                if (ImGui::MenuItem("Save Database", "Ctrl+S"))
+                {
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                    save_data_file(g_data_path, g_data_entries);
+                }
+                if (ImGui::MenuItem("Save Database As", "Ctrl+Shift+S"))
+                {
+                    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                    const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+                    if (fp)
+                    {
+                        g_data_path = fp;
+                        save_data_file(g_data_path, g_data_entries);
+                    }
+                }
+                if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
+                {
+                    show_notes_explorer = true;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Bookmark Verse", "Ctrl+D"))
+                {
+                    int idx = find_bookmark(g_data_entries, nav_book, nav_chapter, nav_verse);
+                    if (idx >= 0)
+                        g_data_entries.erase(g_data_entries.begin() + idx);
+                    else
+                    {
+                        DataEntry e;
+                        e.type = "bookmark";
+                        e.book_id = nav_book;
+                        e.chapter = nav_chapter;
+                        e.verse = nav_verse;
+                        e.sel_start = -1;
+                        e.sel_end = -1;
+                        std::string ts = timestamp();
+                        e.created = ts;
+                        e.modified = ts;
+                        g_data_entries.push_back(e);
+                    }
+                }
+                if (ImGui::MenuItem("Show Bookmarks", "Ctrl+Shift+D"))
+                {
+                    show_bookmarks_dialog = !show_bookmarks_dialog;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
                 {
                     glfwSetWindowShouldClose(window, true);
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Search"))
+            {
+                if (ImGui::MenuItem("Search Bible", "Ctrl+F"))
+                {
+                    show_search = true;
+                }
+                if (ImGui::MenuItem("Navigation History", "Ctrl+H"))
+                {
+                    show_history_dialog = true;
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("Settings"))
             {
+                if (ImGui::MenuItem("Toggle Menu", "Ctrl+M"))
+                {
+                    show_menu = !show_menu;
+                }
+
+                ImGui::Separator();
+
                 if (ImGui::MenuItem("Reset Layout"))
                 {
                     def_translat = "asv";
@@ -430,8 +1033,33 @@ int main(int, char**)
                     nav_book = 1;
                     nav_chapter = 1;
                     nav_verse = -1;
+                    show_notes = false;
+                    show_notes_explorer = false;
+                    show_search = false;
+                    show_bookmarks_dialog = false;
+                    show_history_dialog = false;
+
+                    g_data_path = exe_dir() + "/notes.json";
                     remove((exe_dir() + "/tomewell_state.ini").c_str());
                     reset_layout = true;
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Help"))
+            {
+                if (ImGui::MenuItem("Tomewell Help"))
+                {
+                    std::string help_path = exe_dir() + "/tomewell_help.html";
+#ifdef _WIN32
+                    std::string cmd = "start \"\" \"" + help_path + "\"";
+#else
+                    std::string cmd = "xdg-open \"" + help_path + "\"";
+#endif
+                    system(cmd.c_str());
+                }
+                if (ImGui::MenuItem("Special Search Commands"))
+                {
+                    show_special_search_dialog = true;
                 }
                 ImGui::EndMenu();
             }
@@ -465,7 +1093,7 @@ int main(int, char**)
         if (reset_layout)
         {
             reset_layout = false;
-            remove("imgui.ini");
+            remove((exe_dir() + "/imgui.ini").c_str());
             ImGui::ClearIniSettings();
         }
 
@@ -491,6 +1119,7 @@ int main(int, char**)
             if (!translation_windows[i].open) continue;
             char name[64];
             snprintf(name, sizeof(name), "Other Translation##%d", i);
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin(name, &translation_windows[i].open);
 
             if (ImGui::BeginCombo("##trans", translation_windows[i].translation.c_str()))
@@ -533,18 +1162,449 @@ int main(int, char**)
 
             ImGui::End();
         }
+
+        // Search window
+        if (show_search)
+        {
+            ImGui::SetNextWindowSize(ImVec2(560, 440), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Search Bible", &show_search))
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    show_search = false;
+                    search_buf[0] = '\0';
+                    search_results.clear();
+                    g_highlight_query.clear();
+                    show_search = false;
+                }
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    search_buf[0] = '\0';
+                    search_results.clear();
+                }
+
+                bool cur_is_regex = (strlen(search_buf) >= 2 && (search_buf[0] == 'r' || search_buf[0] == 'R') && search_buf[1] == ':');
+                ImGui::InputText("Query", search_buf, sizeof(search_buf));
+                if (cur_is_regex)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("[REGEX]");
+                }
+                {
+                    static std::string prev_query;
+                    std::string cur = search_buf;
+                    if (cur != prev_query)
+                    {
+                        prev_query = cur;
+                        search_results.clear();
+                        g_highlight_query.clear();
+                        g_regex_error.clear();
+                        if (!cur.empty())
+                        {
+                            const auto& data = get_translation(def_translat);
+                            bool is_regex = (cur.size() >= 2 && (cur[0] == 'r' || cur[0] == 'R') && cur[1] == ':');
+                            std::string raw_query = is_regex ? cur.substr(2) : cur;
+                            g_highlight_query = raw_query;
+                            if (is_regex)
+                            {
+                                try
+                                {
+                                    std::regex pattern(raw_query, std::regex::icase | std::regex::optimize);
+                                    for (auto& t : data)
+                                        for (auto& b : t.books)
+                                            for (auto& c : b.chapters)
+                                                for (auto& v : c.verses)
+                                                {
+                                                    if (std::regex_search(v.text, pattern))
+                                                    {
+                                                        std::string snippet = v.text;
+                                                        if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                                        search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                                    }
+                                                }
+                                }
+                                catch (std::regex_error& e)
+                                {
+                                    g_regex_error = e.what();
+                                }
+                            }
+                            else
+                            {
+                                std::string query = cur;
+                                for (auto& q : query) q = (char)tolower(q);
+                                for (auto& t : data)
+                                    for (auto& b : t.books)
+                                        for (auto& c : b.chapters)
+                                            for (auto& v : c.verses)
+                                            {
+                                                std::string lower = v.text;
+                                                for (auto& ch : lower) ch = (char)tolower(ch);
+                                                if (lower.find(query) != std::string::npos)
+                                                {
+                                                    std::string snippet = v.text;
+                                                    if (snippet.size() > 120) snippet = snippet.substr(0, 117) + "...";
+                                                    search_results.push_back({b.id, b.name, c.num, v.num, snippet});
+                                                }
+                                            }
+                            }
+                        }
+                    }
+                }
+
+                if (!search_results.empty())
+                {
+                    ImGui::Separator();
+                    ImGui::Text("%zu results", search_results.size());
+                    ImGui::BeginChild("##results", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                    for (size_t i = 0; i < search_results.size(); i++)
+                    {
+                        auto& r = search_results[i];
+                        char label[256];
+                        snprintf(label, sizeof(label), "%s %d:%d  %s", r.book_name.c_str(), r.chapter, r.verse, r.snippet.c_str());
+                        ImGui::PushID((int)i);
+                        if (ImGui::Selectable(label))
+                        {
+                            nav_book = r.book_id;
+                            nav_chapter = r.chapter;
+                            nav_verse = r.verse;
+                        }
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                        {
+                            g_tree_inited = false;
+                            g_scroll_to_verse = true;
+                            search_buf[0] = '\0';
+                            search_results.clear();
+                            show_search = false;
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::EndChild();
+                }
+                else if (strlen(search_buf) > 0 && search_results.empty())
+                {
+                    if (!g_regex_error.empty())
+                        ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Regex error: %s", g_regex_error.c_str());
+                    else
+                        ImGui::TextUnformatted("No results found.");
+                }
+            }
+            ImGui::End();
+        }
+        if (!show_search)
+            g_highlight_query.clear();
+
+        // Navigation history dialog
+        if (show_history_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Navigation History", &show_history_dialog);
+            {
+                ImGui::Text("%zu entries", nav_history.size());
+                ImGui::Separator();
+                ImGui::BeginChild("##history", ImVec2(-FLT_MIN, -FLT_MIN), true);
+                for (int i = (int)nav_history.size() - 1; i >= 0; i--)
+                {
+                    auto& h = nav_history[i];
+                    ImGui::PushID(i);
+                    if (ImGui::Selectable(h.label.c_str()))
+                    {
+                        nav_book = h.book;
+                        nav_chapter = h.chapter;
+                        nav_verse = h.verse;
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndChild();
+            }
+            ImGui::End();
+        }
+
+        // Notes editor
+        if (show_notes)
+        {
+            const auto& tree_data = get_translation(def_translat);
+            if (nav_book != note_book || nav_chapter != note_chapter || nav_verse != note_verse)
+            {
+                flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+                note_book = nav_book;
+                note_chapter = nav_chapter;
+                note_verse = nav_verse;
+                int idx = find_entry(g_data_entries, note_book, note_chapter, note_verse);
+                if (idx >= 0)
+                {
+                    const auto& c = g_data_entries[idx].content;
+                    size_t len = c.size();
+                    if (len >= sizeof(note_edit_buf)) len = sizeof(note_edit_buf) - 1;
+                    std::memcpy(note_edit_buf, c.c_str(), len);
+                    note_edit_buf[len] = '\0';
+                }
+                else
+                {
+                    note_edit_buf[0] = '\0';
+                }
+            }
+
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Notes Editor", &show_notes);
+            {
+                ImGui::TextDisabled("%s", g_data_path.c_str());
+
+                const char* bn = book_name(tree_data, note_book);
+                if (note_verse >= 0)
+                    ImGui::Text("%s  %d:%d", bn, note_chapter, note_verse);
+                else
+                    ImGui::Text("%s  Chapter %d", bn, note_chapter);
+
+                ImGui::Separator();
+
+                ImGui::InputTextMultiline("##note", note_edit_buf, sizeof(note_edit_buf),
+                    ImVec2(-FLT_MIN, -FLT_MIN));
+            }
+            ImGui::End();
+        }
+
+        // Notes Explorer
+        if (show_notes_explorer)
+        {
+            const auto& notes_tree_data = get_translation(def_translat);
+            if (g_notes_tree_dirty)
+                rebuild_notes_tree(notes_tree_data);
+
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Notes Explorer", &show_notes_explorer);
+            {
+                for (auto& t : g_notes_tree)
+                {
+                    if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                            if (b.id == nav_book)
+                                b_flags |= ImGuiTreeNodeFlags_Selected;
+                            bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
+                            if (ImGui::IsItemClicked())
+                            {
+                                nav_book = b.id;
+                                nav_chapter = 1;
+                                nav_verse = -1;
+                            }
+                            if (b_open)
+                            {
+                                for (auto& c : b.chapters)
+                                {
+                                    char ch_label[32];
+                                    snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                    ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                    if (b.id == nav_book && c.num == nav_chapter)
+                                        c_flags |= ImGuiTreeNodeFlags_Selected;
+                                    bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
+                                    if (ImGui::IsItemClicked())
+                                    {
+                                        nav_book = b.id;
+                                        nav_chapter = c.num;
+                                        nav_verse = -1;
+                                    }
+                                    if (c_open)
+                                    {
+                                        for (auto& v : c.verses)
+                                        {
+                                            char v_label[32];
+                                            snprintf(v_label, sizeof(v_label), "%d", v.num);
+                                            ImGui::PushID(v.num);
+                                            ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                            if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse)
+                                                v_flags |= ImGuiTreeNodeFlags_Selected;
+                                            ImGui::TreeNodeEx(v_label, v_flags);
+                                            ImGui::PopID();
+                                            if (ImGui::IsItemClicked())
+                                            {
+                                                nav_book = b.id;
+                                                nav_chapter = c.num;
+                                                nav_verse = v.num;
+                                            }
+                                        }
+                                        if (c.has_chapter_note)
+                                        {
+                                            ImGuiTreeNodeFlags cn_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                            if (b.id == nav_book && c.num == nav_chapter && nav_verse == -1)
+                                                cn_flags |= ImGuiTreeNodeFlags_Selected;
+                                            ImGui::TreeNodeEx("Chapter Note", cn_flags);
+                                            if (ImGui::IsItemClicked())
+                                            {
+                                                nav_book = b.id;
+                                                nav_chapter = c.num;
+                                                nav_verse = -1;
+                                            }
+                                        }
+                                        ImGui::TreePop();
+                                    }
+                            }
+                            ImGui::TreePop();
+                        }
+                    }
+                    ImGui::TreePop();
+                }
+            }
+            ImGui::End();
+        }
+        }
+
+        // Bookmarks dialog
+        if (show_bookmarks_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Bookmarks", &show_bookmarks_dialog);
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                show_bookmarks_dialog = false;
+            {
+                const auto& bm_tree_data = get_translation(def_translat);
+                bool any = false;
+                for (size_t i = 0; i < g_data_entries.size(); i++)
+                {
+                    auto& e = g_data_entries[i];
+                    if (e.type != "bookmark") continue;
+                    any = true;
+                    const char* bn = book_name(bm_tree_data, e.book_id);
+                    if (e.verse >= 0)
+                        ImGui::Text("%s %d:%d", bn, e.chapter, e.verse);
+                    else
+                        ImGui::Text("%s Chapter %d", bn, e.chapter);
+                    ImGui::SameLine();
+                    char go_id[32];
+                    snprintf(go_id, sizeof(go_id), "Go##bm%d", (int)i);
+                    if (ImGui::SmallButton(go_id))
+                    {
+                        nav_book = e.book_id;
+                        nav_chapter = e.chapter;
+                        nav_verse = e.verse;
+                        g_tree_inited = false;
+                        g_scroll_to_verse = true;
+                        show_bookmarks_dialog = false;
+                    }
+                    ImGui::SameLine();
+                    char del_id[32];
+                    snprintf(del_id, sizeof(del_id), "X##bm%d", (int)i);
+                    if (ImGui::SmallButton(del_id))
+                    {
+                        g_data_entries.erase(g_data_entries.begin() + i);
+                        i--;
+                    }
+                }
+                if (!any)
+                {
+                    ImGui::TextDisabled("No bookmarks yet.");
+                    ImGui::TextDisabled("Navigate to a verse and press Ctrl+D to bookmark it.");
+                }
+            }
+            ImGui::End();
+        }
+
+        if (show_special_search_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Special Search Commands", &show_special_search_dialog);
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                show_special_search_dialog = false;
+            {
+                ImGui::TextDisabled("Prefix your search query with \"r:\" to use regex.");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:\\d+");
+                ImGui::Text("Finds verses containing one or more digits.");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:and|or");
+                ImGui::Text("Finds verses containing \"and\" or \"or\".");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:^Blessed");
+                ImGui::Text("Finds verses starting with \"Blessed\".");
+                ImGui::Separator();
+                ImGui::Text("Example:   r:blessed$");
+                ImGui::Text("Finds verses ending with \"blessed\".");
+            }
+            ImGui::End();
+        }
+
         {
             ImGui::Begin("Treeview");
 
             const auto& tree_data = get_translation(def_translat);
+            if (ImGui::SmallButton("Expand All"))
+            {
+                g_expand_all = true;
+                g_collapse_all = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Collapse All"))
+            {
+                g_collapse_all = true;
+                g_expand_all = false;
+            }
+            if (g_collapse_all)
+            {
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(true);
+                    if (ImGui::TreeNodeEx(t.label.c_str(), 0))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGui::SetNextItemOpen(true);
+                            if (ImGui::TreeNodeEx(b.name.c_str(), 0))
+                            {
+                                for (auto& c : b.chapters)
+                                {
+                                    char ch_label[32];
+                                    snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
+                                    ImGui::SetNextItemOpen(false);
+                                    ImGui::TreeNodeEx(ch_label, 0);
+                                }
+                                ImGui::TreePop();
+                            }
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(true);
+                    if (ImGui::TreeNodeEx(t.label.c_str(), 0))
+                    {
+                        for (auto& b : t.books)
+                        {
+                            ImGui::SetNextItemOpen(false);
+                            ImGui::TreeNodeEx(b.name.c_str(), 0);
+                        }
+                        ImGui::TreePop();
+                    }
+                }
+                for (auto& t : tree_data)
+                {
+                    ImGui::SetNextItemOpen(false);
+                    ImGui::TreeNodeEx(t.label.c_str(), 0);
+                }
+            }
+
             for (auto& t : tree_data)
             {
+                bool has_nav = false;
+                for (auto& b : t.books)
+                    if (b.id == nav_book) { has_nav = true; break; }
+                if (!g_collapse_all && (g_expand_all || (!g_tree_inited && has_nav)))
+                    ImGui::SetNextItemOpen(true);
                 if (ImGui::TreeNodeEx(t.label.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
                 {
                     for (auto& b : t.books)
                     {
                         ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
-                        if (b.id == nav_book) b_flags |= ImGuiTreeNodeFlags_Selected;
+                        if (b.id == nav_book)
+                        {
+                            b_flags |= ImGuiTreeNodeFlags_Selected;
+                            if (!g_collapse_all && !g_tree_inited) ImGui::SetNextItemOpen(true);
+                        }
+                        if (!g_collapse_all && g_expand_all)
+                            ImGui::SetNextItemOpen(true);
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
                         if (ImGui::IsItemClicked())
                         {
@@ -560,7 +1620,12 @@ int main(int, char**)
                                 snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
                                 ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
                                 if (b.id == nav_book && c.num == nav_chapter)
+                                {
                                     c_flags |= ImGuiTreeNodeFlags_Selected;
+                                    if (!g_collapse_all && !g_tree_inited) ImGui::SetNextItemOpen(true);
+                                }
+                                if (!g_collapse_all && g_expand_all)
+                                    ImGui::SetNextItemOpen(false);
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
                                 if (ImGui::IsItemClicked())
                                 {
@@ -576,8 +1641,15 @@ int main(int, char**)
                                         snprintf(v_label, sizeof(v_label), "%d", v.num);
                                         ImGui::PushID(v.num);
                                         ImGuiTreeNodeFlags v_flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                                        if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse)
+                                            v_flags |= ImGuiTreeNodeFlags_Selected;
                                         ImGui::TreeNodeEx(v_label, v_flags);
                                         ImGui::PopID();
+                                        if (b.id == nav_book && c.num == nav_chapter && v.num == nav_verse && g_scroll_to_verse)
+                                        {
+                                            ImGui::ScrollToItem();
+                                            g_scroll_to_verse = false;
+                                        }
                                         if (ImGui::IsItemClicked())
                                         {
                                             nav_book = b.id;
@@ -594,6 +1666,10 @@ int main(int, char**)
                     ImGui::TreePop();
                 }
             }
+
+            g_tree_inited = true;
+            g_expand_all = false;
+            g_collapse_all = false;
 
             ImGui::End();
         }
@@ -633,16 +1709,28 @@ int main(int, char**)
     glfwTerminate();
 
 
+    // Flush and save notes
+    flush_note(note_book, note_chapter, note_verse, note_edit_buf);
+    save_data_file(g_data_path, g_data_entries);
+
     // Store custom state
     {
         FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
         if (f)
         {
-            fprintf(f, "%s\n", def_translat.c_str());
+            fprintf(f, "[default_translation]\n%s\n", def_translat.c_str());
             for (int i = 0; i < 16; i++)
             {
-                fprintf(f, "%d %s\n", translation_windows[i].open ? 1 : 0, translation_windows[i].translation.c_str());
+                fprintf(f, "[translation_window%d]\n%d %s\n", i,
+                    translation_windows[i].open ? 1 : 0,
+                    translation_windows[i].translation.c_str());
             }
+            fprintf(f, "[navigation]\n%d %d %d\n", nav_book, nav_chapter, nav_verse);
+            fprintf(f, "[show_notes]\n%d\n", show_notes ? 1 : 0);
+            fprintf(f, "[show_notes_explorer]\n%d\n", show_notes_explorer ? 1 : 0);
+            fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
+            fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
+            fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
             fclose(f);
         }
     }

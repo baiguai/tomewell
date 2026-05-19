@@ -43,6 +43,9 @@ make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$FULL_EXE" -j"$(nproc)"
 
 echo -e "${YELLOW}==> Copying translations...${NC}"
 rm -rf "$BIN_DIR/translations"
-rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/" "$BIN_DIR/translations/"
+rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/done/" "$BIN_DIR/translations/"
+
+echo -e "${YELLOW}==> Copying help file...${NC}"
+cp "$SCRIPT_DIR/tomewell_help.html" "$BIN_DIR/"
 
 echo -e "${GREEN}==> Build complete: $FULL_EXE${NC}"
