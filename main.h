@@ -24,6 +24,7 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include "nlohmann/json.hpp"
 
 struct VerseInfo { int num; std::string text; };
 struct ChapterInfo { int num; std::vector<VerseInfo> verses; };
@@ -32,7 +33,23 @@ struct TestamentInfo { int num; std::string label; std::vector<BookInfo> books; 
 
 struct SearchResult { int book_id; std::string book_name; int chapter; int verse; std::string snippet; };
 
+struct DataEntry {
+    std::string type;       // "note", future: "bookmark", etc.
+    int book_id;
+    int chapter;
+    int verse;              // -1 for chapter-level
+    int sel_start;          // -1 for non-selection
+    int sel_end;            // -1 for non-selection
+    std::string content;
+    std::string created;
+    std::string modified;
+};
+
 std::vector<TestamentInfo> load_translation(const std::string& path);
 std::string exe_dir();
+std::vector<DataEntry> load_data_file(const std::string& path);
+void save_data_file(const std::string& path, const std::vector<DataEntry>& entries);
+void create_default_data_file(const std::string& path);
+std::string timestamp();
 
 #endif

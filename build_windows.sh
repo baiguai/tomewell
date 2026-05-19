@@ -14,12 +14,16 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 CXX="x86_64-w64-mingw32-g++"
-CXXFLAGS="-std=c++11 -O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include"
+CC="x86_64-w64-mingw32-gcc"
+BASE_FLAGS="-O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
+CXXFLAGS="-std=c++11 $BASE_FLAGS"
+CFLAGS="$BASE_FLAGS"
 CXXFLAGS_STATIC="-static-libstdc++ -static-libgcc"
-LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32"
+LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32 -lole32 -lcomdlg32"
 
 SOURCES=(
     main.cpp
+    "$DEPS_DIR/tinyfiledialogs/tinyfiledialogs.c"
     "$IMGUI_DIR/imgui.cpp"
     "$IMGUI_DIR/imgui_demo.cpp"
     "$IMGUI_DIR/imgui_draw.cpp"
@@ -64,9 +68,15 @@ FULL_EXE="$BIN_DIR/$EXE"
 OBJS=()
 for src in "${SOURCES[@]}"; do
     base="$(basename "$src")"
-    obj="${base%.cpp}.o"
-    echo "  $CXX -c $src"
-    $CXX $CXXFLAGS $CXXFLAGS_STATIC -c "$src" -o "$obj"
+    obj="${base%.*}.o"
+    ext="${src##*.}"
+    if [[ "$ext" == "c" ]]; then
+        echo "  $CC -c $src"
+        $CC $CFLAGS -c "$src" -o "$obj"
+    else
+        echo "  $CXX -c $src"
+        $CXX $CXXFLAGS $CXXFLAGS_STATIC -c "$src" -o "$obj"
+    fi
     OBJS+=("$obj")
 done
 
@@ -78,7 +88,10 @@ rm -f "${OBJS[@]}"
 
 echo -e "${YELLOW}==> Copying translations...${NC}"
 rm -rf "$BIN_DIR/translations"
-rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/" "$BIN_DIR/translations/"
+rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/done/" "$BIN_DIR/translations/"
+
+echo -e "${YELLOW}==> Copying help file...${NC}"
+cp "$SCRIPT_DIR/tomewell_help.html" "$BIN_DIR/"
 
 echo -e "${GREEN}==> Done: $FULL_EXE${NC}"
 echo -e "${GREEN}    (copy the whole bin/windows/ folder to a Windows machine to run)${NC}"
