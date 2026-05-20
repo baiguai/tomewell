@@ -1621,6 +1621,7 @@ int main(int, char**)
                     for (int i = 0; i < (int)suggestions.size(); i++)
                     {
                         bool is_sel = (i == go_to_sel);
+                        if (is_sel) ImGui::SetScrollHereY();
                         if (ImGui::Selectable(suggestions[i].display.c_str(), is_sel))
                         {
                             go_to_sel = i;
