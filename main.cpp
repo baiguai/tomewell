@@ -437,18 +437,31 @@ struct GoToSuggestion {
 struct GoToCbData {
     std::vector<GoToSuggestion>* suggestions;
     int* selected;
+    bool* focus_requested;
 };
 
 static int go_to_callback(ImGuiInputTextCallbackData* data)
 {
+    GoToCbData* cb = (GoToCbData*)data->UserData;
+
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways)
+    {
+        if (cb && cb->focus_requested && *cb->focus_requested)
+        {
+            data->CursorPos = data->BufTextLen;
+            data->SelectionStart = data->SelectionEnd = data->BufTextLen;
+            *cb->focus_requested = false;
+        }
+    }
+
     if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion)
     {
-        GoToCbData* cb = (GoToCbData*)data->UserData;
         if (cb->selected && *cb->selected >= 0 && cb->suggestions && *cb->selected < (int)cb->suggestions->size())
         {
             auto& s = (*cb->suggestions)[*cb->selected];
             data->DeleteChars(0, data->BufTextLen);
             data->InsertChars(0, s.insert_text.c_str());
+            if (cb->focus_requested) *cb->focus_requested = true;
         }
     }
     return 0;
@@ -791,6 +804,7 @@ int main(int, char**)
     static bool show_go_to_dialog = false;
     static char go_to_buf[256] = "";
     static int go_to_sel = -1;
+    static bool go_to_focus = false;
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
     static bool show_history_dialog = false;
@@ -1560,10 +1574,29 @@ int main(int, char**)
                 const auto& data = get_translation(def_translat);
                 auto suggestions = get_go_to_suggestions(go_to_buf, data);
 
-                // Input text with Tab completion callback
-                GoToCbData cb_data = { &suggestions, &go_to_sel };
+                // If focus was requested (after accepting a suggestion), return it to the input
+                // Note: go_to_focus is cleared by the callback after placing cursor at end
+                if (go_to_focus)
+                    ImGui::SetKeyboardFocusHere();
+
+                // Parse reference (used for Enter logic and preview)
+                int book_id = -1, chapter = 1, verse = -1;
+                bool valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+
+                // Enter to accept selected suggestion (only when buffer is NOT a valid reference)
+                bool enter_accepted = false;
+                if (!suggestions.empty() && go_to_sel >= 0 && !valid && ImGui::IsKeyPressed(ImGuiKey_Enter, false))
+                {
+                    strncpy(go_to_buf, suggestions[go_to_sel].insert_text.c_str(), sizeof(go_to_buf) - 1);
+                    go_to_buf[sizeof(go_to_buf) - 1] = '\0';
+                    go_to_focus = true;
+                    enter_accepted = true;
+                }
+
+                // Input text with Tab completion and cursor-position callbacks
+                GoToCbData cb_data = { &suggestions, &go_to_sel, &go_to_focus };
                 bool enter_pressed = ImGui::InputText("##ref", go_to_buf, sizeof(go_to_buf),
-                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion,
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCompletion,
                     go_to_callback, &cb_data);
 
                 // Clamp selection to valid range
@@ -1592,6 +1625,7 @@ int main(int, char**)
                             go_to_sel = i;
                             strncpy(go_to_buf, suggestions[i].insert_text.c_str(), sizeof(go_to_buf) - 1);
                             go_to_buf[sizeof(go_to_buf) - 1] = '\0';
+                            go_to_focus = true;
                         }
                     }
                     ImGui::EndChild();
@@ -1599,13 +1633,25 @@ int main(int, char**)
 
                 ImGui::Separator();
 
-                int book_id = -1, chapter = 1, verse = -1;
-                bool valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+                // Re-parse after InputText (buffer may have changed from user typing)
+                book_id = -1; chapter = 1; verse = -1;
+                valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+
+                // Navigation: Enter navigates when not consumed by suggestion accept
+                if (enter_pressed && !enter_accepted && valid)
+                {
+                    nav_book = book_id;
+                    nav_chapter = chapter;
+                    nav_verse = verse;
+                    g_tree_inited = false;
+                    g_scroll_to_verse = true;
+                    show_go_to_dialog = false;
+                }
 
                 if (valid)
                 {
                     ImGui::Text("Navigate to:  %s %d:%d", book_name(data, book_id), chapter, verse >= 0 ? verse : 1);
-                    if (enter_pressed || ImGui::Button("Go"))
+                    if (ImGui::Button("Go") && !enter_accepted)
                     {
                         nav_book = book_id;
                         nav_chapter = chapter;
@@ -1618,8 +1664,6 @@ int main(int, char**)
                 else if (strlen(go_to_buf) > 0)
                 {
                     ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Unrecognized reference");
-                    if (enter_pressed)
-                        ImGui::SetKeyboardFocusHere(-1);
                 }
                 else
                 {
