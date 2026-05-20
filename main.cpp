@@ -1583,9 +1583,10 @@ int main(int, char**)
                 int book_id = -1, chapter = 1, verse = -1;
                 bool valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
 
-                // Enter to accept selected suggestion (only when buffer is NOT a valid reference)
+                // Enter to accept selected suggestion (only when buffer is not a complete book:chapter:verse reference)
                 bool enter_accepted = false;
-                if (!suggestions.empty() && go_to_sel >= 0 && !valid && ImGui::IsKeyPressed(ImGuiKey_Enter, false))
+                bool full_ref = (valid && verse >= 1);
+                if (!suggestions.empty() && go_to_sel >= 0 && !full_ref && ImGui::IsKeyPressed(ImGuiKey_Enter, false))
                 {
                     strncpy(go_to_buf, suggestions[go_to_sel].insert_text.c_str(), sizeof(go_to_buf) - 1);
                     go_to_buf[sizeof(go_to_buf) - 1] = '\0';
@@ -1637,8 +1638,8 @@ int main(int, char**)
                 book_id = -1; chapter = 1; verse = -1;
                 valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
 
-                // Navigation: Enter navigates when not consumed by suggestion accept
-                if (enter_pressed && !enter_accepted && valid)
+                // Navigation: Enter navigates only with a complete book chapter:verse reference
+                if (enter_pressed && !enter_accepted && valid && verse >= 1)
                 {
                     nav_book = book_id;
                     nav_chapter = chapter;
