@@ -429,6 +429,152 @@ static const char* book_name(const std::vector<TestamentInfo>& data, int id)
     return "Unknown";
 }
 
+struct GoToSuggestion {
+    std::string display;
+    std::string insert_text;
+};
+
+static std::vector<GoToSuggestion> get_go_to_suggestions(const char* input, const std::vector<TestamentInfo>& data)
+{
+    std::vector<GoToSuggestion> result;
+    if (!input || !*input) return result;
+    std::string s = input;
+
+    // Check if input starts with a known book name (for chapter/verse suggestion mode)
+    std::string matched_book;
+    std::string after_book;
+    for (auto& t : data)
+        for (auto& b : t.books)
+        {
+            if (b.name.size() > s.size()) continue;
+            if (strncasecmp(b.name.c_str(), s.c_str(), b.name.size()) != 0) continue;
+            if (s.size() > b.name.size() && s[b.name.size()] != ' ') continue;
+            if (b.name.size() > matched_book.size())
+            {
+                matched_book = b.name;
+                after_book = s.substr(b.name.size());
+                size_t ns = after_book.find_first_not_of(' ');
+                after_book = (ns != std::string::npos) ? after_book.substr(ns) : "";
+            }
+        }
+
+    if (!matched_book.empty() && !after_book.empty())
+    {
+        size_t colon = after_book.find(':');
+        if (colon != std::string::npos)
+        {
+            // Verse suggestion mode (only when user has typed a verse digit)
+            if (!after_book.empty() && after_book.size() > colon + 1)
+            {
+                std::string ch_str = after_book.substr(0, colon);
+                std::string v_part = after_book.substr(colon + 1);
+                int ch_num = atoi(ch_str.c_str());
+                for (auto& t : data)
+                    for (auto& b : t.books)
+                        if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                            for (auto& c : b.chapters)
+                                if (c.num == ch_num)
+                                    for (auto& v : c.verses)
+                                    {
+                                        char vs[32];
+                                        snprintf(vs, sizeof(vs), "%d", v.num);
+                                        if (strncmp(vs, v_part.c_str(), v_part.size()) == 0)
+                                        {
+                                            char label[64];
+                                            snprintf(label, sizeof(label), "Verse %d", v.num);
+                                            result.push_back({label, matched_book + " " + ch_str + ":" + vs});
+                                        }
+                                    }
+            }
+        }
+        else
+        {
+            // Chapter suggestion mode
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                        {
+                            char cs[32];
+                            snprintf(cs, sizeof(cs), "%d", c.num);
+                            if (strncmp(cs, after_book.c_str(), after_book.size()) == 0)
+                            {
+                                char label[64];
+                                snprintf(label, sizeof(label), "Chapter %d (%d v)", c.num, (int)c.verses.size());
+                                result.push_back({label, matched_book + " " + cs + ":"});
+                            }
+                        }
+        }
+    }
+    else if (matched_book.empty())
+    {
+        // Book suggestion mode
+        for (auto& t : data)
+            for (auto& b : t.books)
+                if (strncasecmp(b.name.c_str(), s.c_str(), s.size()) == 0)
+                {
+                    char label[128];
+                    snprintf(label, sizeof(label), "%s (%d ch)", b.name.c_str(), (int)b.chapters.size());
+                    result.push_back({label, std::string(b.name) + " "});
+                }
+    }
+
+    if (result.size() > 20) result.resize(20);
+    return result;
+}
+
+static bool parse_reference(const char* input, const std::vector<TestamentInfo>& data, int& out_book, int& out_chapter, int& out_verse)
+{
+    std::string s = input;
+    size_t colon = s.find(':');
+    std::string before_verse = (colon != std::string::npos) ? s.substr(0, colon) : s;
+
+    int best_id = -1;
+    size_t best_len = 0;
+    int chapter = 1;
+
+    for (auto& t : data)
+        for (auto& b : t.books)
+        {
+            if (b.name.size() <= best_len) continue;
+            if (strncasecmp(b.name.c_str(), before_verse.c_str(), b.name.size()) != 0) continue;
+            if (before_verse.size() > b.name.size() && before_verse[b.name.size()] != ' ') continue;
+
+            std::string rest = before_verse.substr(b.name.size());
+            size_t ns = rest.find_first_not_of(' ');
+            rest = (ns != std::string::npos) ? rest.substr(ns) : "";
+
+            int ch = 1;
+            if (!rest.empty())
+            {
+                char* end = nullptr;
+                ch = strtol(rest.c_str(), &end, 10);
+                if (end == rest.c_str() || *end != '\0') continue;
+            }
+
+            best_id = b.id;
+            best_len = b.name.size();
+            chapter = ch;
+        }
+
+    // Fallback: unique prefix match for abbreviations
+    if (best_id < 0)
+    {
+        int count = 0, id = -1;
+        for (auto& t : data)
+            for (auto& b : t.books)
+                if (strncasecmp(b.name.c_str(), before_verse.c_str(), before_verse.size()) == 0)
+                { count++; id = b.id; }
+        if (count == 1) best_id = id;
+    }
+
+    if (best_id < 0) return false;
+    out_book = best_id;
+    out_chapter = chapter;
+    out_verse = (colon != std::string::npos) ? atoi(s.substr(colon + 1).c_str()) : -1;
+    return true;
+}
+
 static void flush_note(int book, int chapter, int verse, const char* buf)
 {
     if (book < 0) return;
@@ -610,6 +756,8 @@ int main(int, char**)
     static const char* filters[] = {"*.json"};
 
     // Search state
+    static bool show_go_to_dialog = false;
+    static char go_to_buf[256] = "";
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
     static bool show_history_dialog = false;
@@ -838,7 +986,7 @@ int main(int, char**)
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_G))
         {
-            // Add go to logic
+            show_go_to_dialog = true;
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
         {
@@ -1037,7 +1185,7 @@ int main(int, char**)
 
                 if (ImGui::MenuItem("Go To Reference", "Ctrl+G"))
                 {
-                    // Add go to logic
+                    show_go_to_dialog = true;
                 }
 
                 if (ImGui::MenuItem("Navigation History", "Ctrl+H"))
@@ -1334,6 +1482,73 @@ int main(int, char**)
         }
         if (!show_search)
             g_highlight_query.clear();
+
+        // Go to Reference dialog
+        if (show_go_to_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(420, 250), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            if (ImGui::Begin("Go to Reference", &show_go_to_dialog))
+            {
+                if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                    show_go_to_dialog = false;
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    go_to_buf[0] = '\0';
+                }
+
+                const auto& data = get_translation(def_translat);
+                auto suggestions = get_go_to_suggestions(go_to_buf, data);
+                bool enter_pressed = ImGui::InputText("##ref", go_to_buf, sizeof(go_to_buf), ImGuiInputTextFlags_EnterReturnsTrue);
+
+                if (!suggestions.empty() && ImGui::IsItemActive())
+                {
+                    float height = ImMin(200.0f, (float)suggestions.size() * ImGui::GetTextLineHeightWithSpacing());
+                    ImGui::BeginChild("##suggestions", ImVec2(ImGui::GetItemRectSize().x, height), true);
+                    for (auto& sug : suggestions)
+                    {
+                        if (ImGui::Selectable(sug.display.c_str()))
+                        {
+                            strncpy(go_to_buf, sug.insert_text.c_str(), sizeof(go_to_buf) - 1);
+                            go_to_buf[sizeof(go_to_buf) - 1] = '\0';
+                        }
+                    }
+                    ImGui::EndChild();
+                }
+
+                ImGui::Separator();
+
+                int book_id = -1, chapter = 1, verse = -1;
+                bool valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+
+                if (valid)
+                {
+                    ImGui::Text("Navigate to:  %s %d:%d", book_name(data, book_id), chapter, verse >= 0 ? verse : 1);
+                    if (enter_pressed || ImGui::Button("Go"))
+                    {
+                        nav_book = book_id;
+                        nav_chapter = chapter;
+                        nav_verse = verse;
+                        g_tree_inited = false;
+                        g_scroll_to_verse = true;
+                        show_go_to_dialog = false;
+                    }
+                }
+                else if (strlen(go_to_buf) > 0)
+                {
+                    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Unrecognized reference");
+                }
+
+                if (!valid && enter_pressed)
+                {
+                    // Enter pressed but reference invalid - select all text for retry
+                    ImGui::SetKeyboardFocusHere(-1);
+                }
+            }
+            ImGui::End();
+        }
 
         // Navigation history dialog
         if (show_history_dialog)
