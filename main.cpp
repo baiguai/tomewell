@@ -1574,6 +1574,14 @@ int main(int, char**)
                 const auto& data = get_translation(def_translat);
                 auto suggestions = get_go_to_suggestions(go_to_buf, data);
 
+                // Reset selection to first item whenever the input (and thus suggestions list) changes
+                static char last_go_to_buf[256] = "";
+                if (strcmp(last_go_to_buf, go_to_buf) != 0)
+                {
+                    go_to_sel = suggestions.empty() ? -1 : 0;
+                    strcpy(last_go_to_buf, go_to_buf);
+                }
+
                 // If focus was requested (after accepting a suggestion), return it to the input
                 // Note: go_to_focus is cleared by the callback after placing cursor at end
                 if (go_to_focus)
