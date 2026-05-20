@@ -756,6 +756,12 @@ int main(int, char**)
             continue;
         }
 
+        // Toggle multi-viewport for undocking (runtime-safe in ImGui)
+        if (allow_undock)
+            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        else
+            io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -1037,7 +1043,7 @@ int main(int, char**)
 
                 ImGui::Separator();
 
-                if (ImGui::MenuItem("Enable Undocking"))
+                if (ImGui::MenuItem("Enable Undocking", nullptr, &allow_undock))
                 {
                     allow_undock = !allow_undock;
                 }
@@ -1108,7 +1114,8 @@ int main(int, char**)
         ImGui::PopStyleVar(3);
 
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGui::DockSpace(dockspace_id);
+        ImGuiDockNodeFlags docknode_flags = allow_undock ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoUndocking;
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), docknode_flags);
         ImGui::End();
 
         // Reset layout if requested
@@ -1830,15 +1837,13 @@ int main(int, char**)
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Update and Render additional Platform Windows
-        // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
-        //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
-        // if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-        // {
-        //     GLFWwindow* backup_current_context = glfwGetCurrentContext();
-        //     ImGui::UpdatePlatformWindows();
-        //     ImGui::RenderPlatformWindowsDefault();
-        //     glfwMakeContextCurrent(backup_current_context);
-        // }
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
 
         glfwSwapBuffers(window);
     }
