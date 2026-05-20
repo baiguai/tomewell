@@ -836,6 +836,10 @@ int main(int, char**)
         {
             show_history_dialog = !show_history_dialog;
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_G))
+        {
+            // Add go to logic
+        }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
         {
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
@@ -1028,6 +1032,14 @@ int main(int, char**)
                 {
                     show_search = true;
                 }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Go To Reference", "Ctrl+G"))
+                {
+                    // Add go to logic
+                }
+
                 if (ImGui::MenuItem("Navigation History", "Ctrl+H"))
                 {
                     show_history_dialog = true;
@@ -1045,7 +1057,6 @@ int main(int, char**)
 
                 if (ImGui::MenuItem("Enable Undocking", nullptr, &allow_undock))
                 {
-                    allow_undock = !allow_undock;
                 }
 
                 ImGui::Separator();
@@ -1114,8 +1125,7 @@ int main(int, char**)
         ImGui::PopStyleVar(3);
 
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGuiDockNodeFlags docknode_flags = allow_undock ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoUndocking;
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), docknode_flags);
+        ImGui::DockSpace(dockspace_id);
         ImGui::End();
 
         // Reset layout if requested
@@ -1837,7 +1847,8 @@ int main(int, char**)
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Update and Render additional Platform Windows
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        // Must be called every frame (UpdatePlatformWindows self-guards when viewports are disabled)
+        // to keep internal frame tracking in sync.
         {
             GLFWwindow* backup_current_context = glfwGetCurrentContext();
             ImGui::UpdatePlatformWindows();
