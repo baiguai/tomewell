@@ -337,7 +337,9 @@ static void render_highlighted_verse(int num, const std::string& text, const std
 static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
 {
     for (auto& t : data)
+    {
         for (auto& b : t.books)
+        {
             if (b.id == book_id)
             {
                 for (auto& c : b.chapters)
@@ -393,6 +395,8 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                     }
                 return;
             }
+        }
+    }
 }
 
 static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
@@ -566,6 +570,7 @@ int main(int, char**)
     // Our state  !@!
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     static bool show_menu = true;
+    static bool allow_undock = false;
     static bool reset_layout = false;
 
     // Scan available translations
@@ -690,6 +695,11 @@ int main(int, char**)
                 {
                     int n = 0;
                     if (sscanf(buf, "%d", &n) == 1) show_menu = (n != 0);
+                }
+                else if (section == "[allow_undock]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) allow_undock = (n != 0);
                 }
                 else if (section == "[show_history]")
                 {
@@ -1023,6 +1033,13 @@ int main(int, char**)
                 if (ImGui::MenuItem("Toggle Menu", "Ctrl+M"))
                 {
                     show_menu = !show_menu;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Enable Undocking"))
+                {
+                    allow_undock = !allow_undock;
                 }
 
                 ImGui::Separator();
@@ -1859,6 +1876,7 @@ int main(int, char**)
             fprintf(f, "[show_notes_explorer]\n%d\n", show_notes_explorer ? 1 : 0);
             fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
             fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
+            fprintf(f, "[allow_undock]\n%d\n", allow_undock ? 1 : 0);
             fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
             fprintf(f, "[bookmarks]\n%d\n", show_bookmarks_dialog ? 1 : 0);
             fclose(f);
