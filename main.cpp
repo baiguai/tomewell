@@ -1570,17 +1570,17 @@ int main(int, char**)
                 if (go_to_sel < 0 || go_to_sel >= (int)suggestions.size())
                     go_to_sel = suggestions.empty() ? -1 : 0;
 
-                // Keyboard navigation for suggestion list
-                if (ImGui::IsItemActive() && (int)suggestions.size() > 1)
+                // Keyboard navigation (always active when suggestions exist)
+                if (!suggestions.empty())
                 {
-                    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+                    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
                         go_to_sel = (go_to_sel <= 0) ? (int)suggestions.size() - 1 : go_to_sel - 1;
-                    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+                    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
                         go_to_sel = (go_to_sel + 1) % (int)suggestions.size();
                 }
 
-                // Suggestion popup
-                if (!suggestions.empty() && ImGui::IsItemActive())
+                // Suggestion popup (always visible when suggestions exist)
+                if (!suggestions.empty())
                 {
                     float height = ImMin(200.0f, (float)suggestions.size() * ImGui::GetTextLineHeightWithSpacing());
                     ImGui::BeginChild("##suggestions", ImVec2(ImGui::GetItemRectSize().x, height), true);
