@@ -434,13 +434,33 @@ struct GoToSuggestion {
     std::string insert_text;
 };
 
+struct GoToCbData {
+    std::vector<GoToSuggestion>* suggestions;
+    int* selected;
+};
+
+static int go_to_callback(ImGuiInputTextCallbackData* data)
+{
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion)
+    {
+        GoToCbData* cb = (GoToCbData*)data->UserData;
+        if (cb->selected && *cb->selected >= 0 && cb->suggestions && *cb->selected < (int)cb->suggestions->size())
+        {
+            auto& s = (*cb->suggestions)[*cb->selected];
+            data->DeleteChars(0, data->BufTextLen);
+            data->InsertChars(0, s.insert_text.c_str());
+        }
+    }
+    return 0;
+}
+
 static std::vector<GoToSuggestion> get_go_to_suggestions(const char* input, const std::vector<TestamentInfo>& data)
 {
     std::vector<GoToSuggestion> result;
     if (!input || !*input) return result;
     std::string s = input;
 
-    // Check if input starts with a known book name (for chapter/verse suggestion mode)
+    // Check if input starts with a known book name
     std::string matched_book;
     std::string after_book;
     for (auto& t : data)
@@ -458,38 +478,35 @@ static std::vector<GoToSuggestion> get_go_to_suggestions(const char* input, cons
             }
         }
 
-    if (!matched_book.empty() && !after_book.empty())
+    if (!matched_book.empty())
     {
         size_t colon = after_book.find(':');
         if (colon != std::string::npos)
         {
-            // Verse suggestion mode (only when user has typed a verse digit)
-            if (!after_book.empty() && after_book.size() > colon + 1)
-            {
-                std::string ch_str = after_book.substr(0, colon);
-                std::string v_part = after_book.substr(colon + 1);
-                int ch_num = atoi(ch_str.c_str());
-                for (auto& t : data)
-                    for (auto& b : t.books)
-                        if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
-                            for (auto& c : b.chapters)
-                                if (c.num == ch_num)
-                                    for (auto& v : c.verses)
+            // Verse suggestion mode
+            std::string ch_str = after_book.substr(0, colon);
+            std::string v_part = after_book.substr(colon + 1);
+            int ch_num = atoi(ch_str.c_str());
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                            if (c.num == ch_num)
+                                for (auto& v : c.verses)
+                                {
+                                    char vs[32];
+                                    snprintf(vs, sizeof(vs), "%d", v.num);
+                                    if (v_part.empty() || strncmp(vs, v_part.c_str(), v_part.size()) == 0)
                                     {
-                                        char vs[32];
-                                        snprintf(vs, sizeof(vs), "%d", v.num);
-                                        if (strncmp(vs, v_part.c_str(), v_part.size()) == 0)
-                                        {
-                                            char label[64];
-                                            snprintf(label, sizeof(label), "Verse %d", v.num);
-                                            result.push_back({label, matched_book + " " + ch_str + ":" + vs});
-                                        }
+                                        char label[64];
+                                        snprintf(label, sizeof(label), "Verse %d", v.num);
+                                        result.push_back({label, matched_book + " " + ch_str + ":" + vs});
                                     }
-            }
+                                }
         }
-        else
+        else if (!after_book.empty())
         {
-            // Chapter suggestion mode
+            // Chapter suggestion mode (filtered by typed digits)
             for (auto& t : data)
                 for (auto& b : t.books)
                     if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
@@ -505,8 +522,23 @@ static std::vector<GoToSuggestion> get_go_to_suggestions(const char* input, cons
                             }
                         }
         }
+        else
+        {
+            // Just the book name → show all chapters
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                        {
+                            char cs[32];
+                            snprintf(cs, sizeof(cs), "%d", c.num);
+                            char label[64];
+                            snprintf(label, sizeof(label), "Chapter %d (%d v)", c.num, (int)c.verses.size());
+                            result.push_back({label, matched_book + " " + cs + ":"});
+                        }
+        }
     }
-    else if (matched_book.empty())
+    else
     {
         // Book suggestion mode
         for (auto& t : data)
@@ -758,6 +790,7 @@ int main(int, char**)
     // Search state
     static bool show_go_to_dialog = false;
     static char go_to_buf[256] = "";
+    static int go_to_sel = -1;
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
     static bool show_history_dialog = false;
@@ -1068,6 +1101,16 @@ int main(int, char**)
                 save_data_file(g_data_path, g_data_entries);
             }
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_C))
+        {
+            g_expand_all = false;
+            g_collapse_all = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_E))
+        {
+            g_expand_all = true;
+            g_collapse_all = false;
+        }
 
         // Create the main menu
         if (show_menu && ImGui::BeginMainMenuBar())
@@ -1171,6 +1214,20 @@ int main(int, char**)
                 if (ImGui::MenuItem("Quit", "Ctrl+Q"))
                 {
                     glfwSetWindowShouldClose(window, true);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit"))
+            {
+                if (ImGui::MenuItem("Expand All", "Ctrl+Shift+E"))
+                {
+                    g_expand_all = true;
+                    g_collapse_all = false;
+                }
+                if (ImGui::MenuItem("Collapse All", "Ctrl+Shift+C"))
+                {
+                    g_expand_all = false;
+                    g_collapse_all = true;
                 }
                 ImGui::EndMenu();
             }
@@ -1486,7 +1543,7 @@ int main(int, char**)
         // Go to Reference dialog
         if (show_go_to_dialog)
         {
-            ImGui::SetNextWindowSize(ImVec2(420, 250), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(420, 550), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowBgAlpha(1.0f);
             if (ImGui::Begin("Go to Reference", &show_go_to_dialog))
             {
@@ -1497,21 +1554,43 @@ int main(int, char**)
                 {
                     ImGui::SetKeyboardFocusHere();
                     go_to_buf[0] = '\0';
+                    go_to_sel = -1;
                 }
 
                 const auto& data = get_translation(def_translat);
                 auto suggestions = get_go_to_suggestions(go_to_buf, data);
-                bool enter_pressed = ImGui::InputText("##ref", go_to_buf, sizeof(go_to_buf), ImGuiInputTextFlags_EnterReturnsTrue);
 
+                // Input text with Tab completion callback
+                GoToCbData cb_data = { &suggestions, &go_to_sel };
+                bool enter_pressed = ImGui::InputText("##ref", go_to_buf, sizeof(go_to_buf),
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion,
+                    go_to_callback, &cb_data);
+
+                // Clamp selection to valid range
+                if (go_to_sel < 0 || go_to_sel >= (int)suggestions.size())
+                    go_to_sel = suggestions.empty() ? -1 : 0;
+
+                // Keyboard navigation for suggestion list
+                if (ImGui::IsItemActive() && (int)suggestions.size() > 1)
+                {
+                    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+                        go_to_sel = (go_to_sel <= 0) ? (int)suggestions.size() - 1 : go_to_sel - 1;
+                    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+                        go_to_sel = (go_to_sel + 1) % (int)suggestions.size();
+                }
+
+                // Suggestion popup
                 if (!suggestions.empty() && ImGui::IsItemActive())
                 {
                     float height = ImMin(200.0f, (float)suggestions.size() * ImGui::GetTextLineHeightWithSpacing());
                     ImGui::BeginChild("##suggestions", ImVec2(ImGui::GetItemRectSize().x, height), true);
-                    for (auto& sug : suggestions)
+                    for (int i = 0; i < (int)suggestions.size(); i++)
                     {
-                        if (ImGui::Selectable(sug.display.c_str()))
+                        bool is_sel = (i == go_to_sel);
+                        if (ImGui::Selectable(suggestions[i].display.c_str(), is_sel))
                         {
-                            strncpy(go_to_buf, sug.insert_text.c_str(), sizeof(go_to_buf) - 1);
+                            go_to_sel = i;
+                            strncpy(go_to_buf, suggestions[i].insert_text.c_str(), sizeof(go_to_buf) - 1);
                             go_to_buf[sizeof(go_to_buf) - 1] = '\0';
                         }
                     }
@@ -1539,12 +1618,12 @@ int main(int, char**)
                 else if (strlen(go_to_buf) > 0)
                 {
                     ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Unrecognized reference");
+                    if (enter_pressed)
+                        ImGui::SetKeyboardFocusHere(-1);
                 }
-
-                if (!valid && enter_pressed)
+                else
                 {
-                    // Enter pressed but reference invalid - select all text for retry
-                    ImGui::SetKeyboardFocusHere(-1);
+                    ImGui::TextDisabled("Type a book name, then chapter:verse");
                 }
             }
             ImGui::End();
@@ -1908,17 +1987,6 @@ int main(int, char**)
             ImGui::Begin("Treeview");
 
             const auto& tree_data = get_translation(def_translat);
-            if (ImGui::SmallButton("Expand All"))
-            {
-                g_expand_all = true;
-                g_collapse_all = false;
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Collapse All"))
-            {
-                g_collapse_all = true;
-                g_expand_all = false;
-            }
             if (g_collapse_all)
             {
                 for (auto& t : tree_data)
