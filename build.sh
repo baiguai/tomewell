@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="$SCRIPT_DIR/deps"
 IMGUI_DIR="$DEPS_DIR/imgui"
 BIN_DIR="$SCRIPT_DIR/bin/linux"
-EXE="tomewell"
+EXE="scriptorioc"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -46,6 +46,6 @@ rm -rf "$BIN_DIR/translations"
 rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/done/" "$BIN_DIR/translations/"
 
 echo -e "${YELLOW}==> Copying help file...${NC}"
-cp "$SCRIPT_DIR/tomewell_help.html" "$BIN_DIR/"
+cp "$SCRIPT_DIR/scriptorioc_help.html" "$BIN_DIR/"
 
 echo -e "${GREEN}==> Build complete: $FULL_EXE${NC}"
