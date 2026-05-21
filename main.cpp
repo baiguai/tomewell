@@ -1775,7 +1775,7 @@ int main(int, char**)
                             if (b.id == nav_book)
                                 b_flags |= ImGuiTreeNodeFlags_Selected;
                             bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
-                            if (ImGui::IsItemClicked())
+                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                             {
                                 nav_book = b.id;
                                 nav_chapter = 1;
@@ -1791,7 +1791,7 @@ int main(int, char**)
                                     if (b.id == nav_book && c.num == nav_chapter)
                                         c_flags |= ImGuiTreeNodeFlags_Selected;
                                     bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
-                                    if (ImGui::IsItemClicked())
+                                    if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                     {
                                         nav_book = b.id;
                                         nav_chapter = c.num;
@@ -1809,7 +1809,7 @@ int main(int, char**)
                                                 v_flags |= ImGuiTreeNodeFlags_Selected;
                                             ImGui::TreeNodeEx(v_label, v_flags);
                                             ImGui::PopID();
-                                            if (ImGui::IsItemClicked())
+                                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                             {
                                                 nav_book = b.id;
                                                 nav_chapter = c.num;
@@ -1822,7 +1822,7 @@ int main(int, char**)
                                             if (b.id == nav_book && c.num == nav_chapter && nav_verse == -1)
                                                 cn_flags |= ImGuiTreeNodeFlags_Selected;
                                             ImGui::TreeNodeEx("Chapter Note", cn_flags);
-                                            if (ImGui::IsItemClicked())
+                                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                             {
                                                 nav_book = b.id;
                                                 nav_chapter = c.num;
@@ -2106,7 +2106,7 @@ int main(int, char**)
                         if (!g_collapse_all && g_expand_all)
                             ImGui::SetNextItemOpen(true);
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
-                        if (ImGui::IsItemClicked())
+                        if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                         {
                             nav_book = b.id;
                             nav_chapter = 1;
@@ -2127,7 +2127,7 @@ int main(int, char**)
                                 if (!g_collapse_all && g_expand_all)
                                     ImGui::SetNextItemOpen(false);
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
-                                if (ImGui::IsItemClicked())
+                                if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                 {
                                     nav_book = b.id;
                                     nav_chapter = c.num;
@@ -2150,7 +2150,7 @@ int main(int, char**)
                                             ImGui::ScrollToItem();
                                             g_scroll_to_verse = false;
                                         }
-                                        if (ImGui::IsItemClicked())
+                                        if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                         {
                                             nav_book = b.id;
                                             nav_chapter = c.num;
