@@ -337,7 +337,9 @@ static void render_highlighted_verse(int num, const std::string& text, const std
 static void render_passage(const std::vector<TestamentInfo>& data, int book_id, int chapter, int verse_num)
 {
     for (auto& t : data)
+    {
         for (auto& b : t.books)
+        {
             if (b.id == book_id)
             {
                 for (auto& c : b.chapters)
@@ -393,6 +395,8 @@ static void render_passage(const std::vector<TestamentInfo>& data, int book_id, 
                     }
                 return;
             }
+        }
+    }
 }
 
 static int find_entry(const std::vector<DataEntry>& entries, int book, int chapter, int verse)
@@ -423,6 +427,197 @@ static const char* book_name(const std::vector<TestamentInfo>& data, int id)
         for (auto& b : t.books)
             if (b.id == id) return b.name.c_str();
     return "Unknown";
+}
+
+struct GoToSuggestion {
+    std::string display;
+    std::string insert_text;
+};
+
+struct GoToCbData {
+    std::vector<GoToSuggestion>* suggestions;
+    int* selected;
+    bool* focus_requested;
+};
+
+static int go_to_callback(ImGuiInputTextCallbackData* data)
+{
+    GoToCbData* cb = (GoToCbData*)data->UserData;
+
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways)
+    {
+        if (cb && cb->focus_requested && *cb->focus_requested)
+        {
+            data->CursorPos = data->BufTextLen;
+            data->SelectionStart = data->SelectionEnd = data->BufTextLen;
+            *cb->focus_requested = false;
+        }
+    }
+
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion)
+    {
+        if (cb->selected && *cb->selected >= 0 && cb->suggestions && *cb->selected < (int)cb->suggestions->size())
+        {
+            auto& s = (*cb->suggestions)[*cb->selected];
+            data->DeleteChars(0, data->BufTextLen);
+            data->InsertChars(0, s.insert_text.c_str());
+            if (cb->focus_requested) *cb->focus_requested = true;
+        }
+    }
+    return 0;
+}
+
+static std::vector<GoToSuggestion> get_go_to_suggestions(const char* input, const std::vector<TestamentInfo>& data)
+{
+    std::vector<GoToSuggestion> result;
+    if (!input || !*input) return result;
+    std::string s = input;
+
+    // Check if input starts with a known book name
+    std::string matched_book;
+    std::string after_book;
+    for (auto& t : data)
+        for (auto& b : t.books)
+        {
+            if (b.name.size() > s.size()) continue;
+            if (strncasecmp(b.name.c_str(), s.c_str(), b.name.size()) != 0) continue;
+            if (s.size() > b.name.size() && s[b.name.size()] != ' ') continue;
+            if (b.name.size() > matched_book.size())
+            {
+                matched_book = b.name;
+                after_book = s.substr(b.name.size());
+                size_t ns = after_book.find_first_not_of(' ');
+                after_book = (ns != std::string::npos) ? after_book.substr(ns) : "";
+            }
+        }
+
+    if (!matched_book.empty())
+    {
+        size_t colon = after_book.find(':');
+        if (colon != std::string::npos)
+        {
+            // Verse suggestion mode
+            std::string ch_str = after_book.substr(0, colon);
+            std::string v_part = after_book.substr(colon + 1);
+            int ch_num = atoi(ch_str.c_str());
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                            if (c.num == ch_num)
+                                for (auto& v : c.verses)
+                                {
+                                    char vs[32];
+                                    snprintf(vs, sizeof(vs), "%d", v.num);
+                                    if (v_part.empty() || strncmp(vs, v_part.c_str(), v_part.size()) == 0)
+                                    {
+                                        char label[64];
+                                        snprintf(label, sizeof(label), "Verse %d", v.num);
+                                        result.push_back({label, matched_book + " " + ch_str + ":" + vs});
+                                    }
+                                }
+        }
+        else if (!after_book.empty())
+        {
+            // Chapter suggestion mode (filtered by typed digits)
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                        {
+                            char cs[32];
+                            snprintf(cs, sizeof(cs), "%d", c.num);
+                            if (strncmp(cs, after_book.c_str(), after_book.size()) == 0)
+                            {
+                                char label[64];
+                                snprintf(label, sizeof(label), "Chapter %d (%d v)", c.num, (int)c.verses.size());
+                                result.push_back({label, matched_book + " " + cs + ":"});
+                            }
+                        }
+        }
+        else
+        {
+            // Just the book name → show all chapters
+            for (auto& t : data)
+                for (auto& b : t.books)
+                    if (strcasecmp(b.name.c_str(), matched_book.c_str()) == 0)
+                        for (auto& c : b.chapters)
+                        {
+                            char cs[32];
+                            snprintf(cs, sizeof(cs), "%d", c.num);
+                            char label[64];
+                            snprintf(label, sizeof(label), "Chapter %d (%d v)", c.num, (int)c.verses.size());
+                            result.push_back({label, matched_book + " " + cs + ":"});
+                        }
+        }
+    }
+    else
+    {
+        // Book suggestion mode
+        for (auto& t : data)
+            for (auto& b : t.books)
+                if (strncasecmp(b.name.c_str(), s.c_str(), s.size()) == 0)
+                {
+                    char label[128];
+                    snprintf(label, sizeof(label), "%s (%d ch)", b.name.c_str(), (int)b.chapters.size());
+                    result.push_back({label, std::string(b.name) + " "});
+                }
+    }
+
+    if (result.size() > 20) result.resize(20);
+    return result;
+}
+
+static bool parse_reference(const char* input, const std::vector<TestamentInfo>& data, int& out_book, int& out_chapter, int& out_verse)
+{
+    std::string s = input;
+    size_t colon = s.find(':');
+    std::string before_verse = (colon != std::string::npos) ? s.substr(0, colon) : s;
+
+    int best_id = -1;
+    size_t best_len = 0;
+    int chapter = 1;
+
+    for (auto& t : data)
+        for (auto& b : t.books)
+        {
+            if (b.name.size() <= best_len) continue;
+            if (strncasecmp(b.name.c_str(), before_verse.c_str(), b.name.size()) != 0) continue;
+            if (before_verse.size() > b.name.size() && before_verse[b.name.size()] != ' ') continue;
+
+            std::string rest = before_verse.substr(b.name.size());
+            size_t ns = rest.find_first_not_of(' ');
+            rest = (ns != std::string::npos) ? rest.substr(ns) : "";
+
+            int ch = 1;
+            if (!rest.empty())
+            {
+                char* end = nullptr;
+                ch = strtol(rest.c_str(), &end, 10);
+                if (end == rest.c_str() || *end != '\0') continue;
+            }
+
+            best_id = b.id;
+            best_len = b.name.size();
+            chapter = ch;
+        }
+
+    // Fallback: unique prefix match for abbreviations
+    if (best_id < 0)
+    {
+        int count = 0, id = -1;
+        for (auto& t : data)
+            for (auto& b : t.books)
+                if (strncasecmp(b.name.c_str(), before_verse.c_str(), before_verse.size()) == 0)
+                { count++; id = b.id; }
+        if (count == 1) best_id = id;
+    }
+
+    if (best_id < 0) return false;
+    out_book = best_id;
+    out_chapter = chapter;
+    out_verse = (colon != std::string::npos) ? atoi(s.substr(colon + 1).c_str()) : -1;
+    return true;
 }
 
 static void flush_note(int book, int chapter, int verse, const char* buf)
@@ -566,6 +761,7 @@ int main(int, char**)
     // Our state  !@!
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     static bool show_menu = true;
+    static bool allow_undock = false;
     static bool reset_layout = false;
 
     // Scan available translations
@@ -605,6 +801,10 @@ int main(int, char**)
     static const char* filters[] = {"*.json"};
 
     // Search state
+    static bool show_go_to_dialog = false;
+    static char go_to_buf[256] = "";
+    static int go_to_sel = -1;
+    static bool go_to_focus = false;
     static bool show_search = false;
     static bool show_bookmarks_dialog = false;
     static bool show_history_dialog = false;
@@ -630,7 +830,7 @@ int main(int, char**)
 
     // Load custom state
     {
-        std::string state_path = exe_dir() + "/tomewell_state.ini";
+        std::string state_path = exe_dir() + "/scriptorioc_state.ini";
         FILE* f = fopen(state_path.c_str(), "r");
         if (f)
         {
@@ -691,10 +891,20 @@ int main(int, char**)
                     int n = 0;
                     if (sscanf(buf, "%d", &n) == 1) show_menu = (n != 0);
                 }
+                else if (section == "[allow_undock]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) allow_undock = (n != 0);
+                }
                 else if (section == "[show_history]")
                 {
                     int n = 0;
                     if (sscanf(buf, "%d", &n) == 1) show_history_dialog = (n != 0);
+                }
+                else if (section == "[bookmarks]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_bookmarks_dialog = (n != 0);
                 }
             }
             fclose(f);
@@ -740,6 +950,12 @@ int main(int, char**)
             ImGui_ImplGlfw_Sleep(10);
             continue;
         }
+
+        // Toggle multi-viewport for undocking (runtime-safe in ImGui)
+        if (allow_undock)
+            io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        else
+            io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -814,6 +1030,10 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_H))
         {
             show_history_dialog = !show_history_dialog;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_G))
+        {
+            show_go_to_dialog = true;
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
         {
@@ -895,6 +1115,16 @@ int main(int, char**)
                 save_data_file(g_data_path, g_data_entries);
             }
         }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_C))
+        {
+            g_expand_all = false;
+            g_collapse_all = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_E))
+        {
+            g_expand_all = true;
+            g_collapse_all = false;
+        }
 
         // Create the main menu
         if (show_menu && ImGui::BeginMainMenuBar())
@@ -908,10 +1138,7 @@ int main(int, char**)
                         if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
-                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
-                {
-                    show_notes = true;
-                }
+
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("New Database", "Ctrl+N"))
@@ -961,6 +1188,35 @@ int main(int, char**)
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
+                {
+                    glfwSetWindowShouldClose(window, true);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit"))
+            {
+                if (ImGui::MenuItem("Expand All", "Ctrl+Shift+E"))
+                {
+                    g_expand_all = true;
+                    g_collapse_all = false;
+                }
+                if (ImGui::MenuItem("Collapse All", "Ctrl+Shift+C"))
+                {
+                    g_expand_all = false;
+                    g_collapse_all = true;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
+                {
+                    show_notes = true;
+                }
+
                 if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
                 {
                     show_notes_explorer = true;
@@ -993,12 +1249,6 @@ int main(int, char**)
                     show_bookmarks_dialog = !show_bookmarks_dialog;
                 }
 
-                ImGui::Separator();
-
-                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
-                {
-                    glfwSetWindowShouldClose(window, true);
-                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Search"))
@@ -1007,6 +1257,14 @@ int main(int, char**)
                 {
                     show_search = true;
                 }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Go To Reference", "Ctrl+G"))
+                {
+                    show_go_to_dialog = true;
+                }
+
                 if (ImGui::MenuItem("Navigation History", "Ctrl+H"))
                 {
                     show_history_dialog = true;
@@ -1018,6 +1276,12 @@ int main(int, char**)
                 if (ImGui::MenuItem("Toggle Menu", "Ctrl+M"))
                 {
                     show_menu = !show_menu;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Enable Undocking", nullptr, &allow_undock))
+                {
                 }
 
                 ImGui::Separator();
@@ -1040,16 +1304,16 @@ int main(int, char**)
                     show_history_dialog = false;
 
                     g_data_path = exe_dir() + "/notes.json";
-                    remove((exe_dir() + "/tomewell_state.ini").c_str());
+                    remove((exe_dir() + "/scriptorioc_state.ini").c_str());
                     reset_layout = true;
                 }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help"))
             {
-                if (ImGui::MenuItem("Tomewell Help"))
+                if (ImGui::MenuItem("Scriptorioc Help"))
                 {
-                    std::string help_path = exe_dir() + "/tomewell_help.html";
+                    std::string help_path = exe_dir() + "/scriptorioc_help.html";
 #ifdef _WIN32
                     std::string cmd = "start \"\" \"" + help_path + "\"";
 #else
@@ -1172,7 +1436,6 @@ int main(int, char**)
             {
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape))
                 {
-                    show_search = false;
                     search_buf[0] = '\0';
                     search_results.clear();
                     g_highlight_query.clear();
@@ -1296,6 +1559,135 @@ int main(int, char**)
         if (!show_search)
             g_highlight_query.clear();
 
+        // Go to Reference dialog
+        if (show_go_to_dialog)
+        {
+            ImGui::SetNextWindowSize(ImVec2(420, 550), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            if (ImGui::Begin("Go to Reference", &show_go_to_dialog))
+            {
+                if (ImGui::IsWindowFocused() && !ImGui::IsAnyItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                    show_go_to_dialog = false;
+
+                if (ImGui::IsWindowAppearing())
+                {
+                    ImGui::SetKeyboardFocusHere();
+                    go_to_buf[0] = '\0';
+                    go_to_sel = -1;
+                }
+
+                const auto& data = get_translation(def_translat);
+                auto suggestions = get_go_to_suggestions(go_to_buf, data);
+
+                // Reset selection to first item whenever the input (and thus suggestions list) changes
+                static char last_go_to_buf[256] = "";
+                if (strcmp(last_go_to_buf, go_to_buf) != 0)
+                {
+                    go_to_sel = suggestions.empty() ? -1 : 0;
+                    strcpy(last_go_to_buf, go_to_buf);
+                }
+
+                // If focus was requested (after accepting a suggestion), return it to the input
+                // Note: go_to_focus is cleared by the callback after placing cursor at end
+                if (go_to_focus)
+                    ImGui::SetKeyboardFocusHere();
+
+                // Parse reference (used for Enter logic and preview)
+                int book_id = -1, chapter = 1, verse = -1;
+                bool valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+
+                // Enter to accept selected suggestion (only when buffer is not a complete book:chapter:verse reference)
+                bool enter_accepted = false;
+                bool full_ref = (valid && verse >= 1);
+                if (!suggestions.empty() && go_to_sel >= 0 && !full_ref && ImGui::IsKeyPressed(ImGuiKey_Enter, false))
+                {
+                    strncpy(go_to_buf, suggestions[go_to_sel].insert_text.c_str(), sizeof(go_to_buf) - 1);
+                    go_to_buf[sizeof(go_to_buf) - 1] = '\0';
+                    go_to_focus = true;
+                    enter_accepted = true;
+                }
+
+                // Input text with Tab completion and cursor-position callbacks
+                GoToCbData cb_data = { &suggestions, &go_to_sel, &go_to_focus };
+                bool enter_pressed = ImGui::InputText("##ref", go_to_buf, sizeof(go_to_buf),
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCompletion,
+                    go_to_callback, &cb_data);
+
+                // Clamp selection to valid range
+                if (go_to_sel < 0 || go_to_sel >= (int)suggestions.size())
+                    go_to_sel = suggestions.empty() ? -1 : 0;
+
+                // Keyboard navigation (always active when suggestions exist)
+                if (!suggestions.empty())
+                {
+                    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
+                        go_to_sel = (go_to_sel <= 0) ? (int)suggestions.size() - 1 : go_to_sel - 1;
+                    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
+                        go_to_sel = (go_to_sel + 1) % (int)suggestions.size();
+                }
+
+                // Suggestion popup (always visible when suggestions exist)
+                if (!suggestions.empty())
+                {
+                    float height = ImMin(200.0f, (float)suggestions.size() * ImGui::GetTextLineHeightWithSpacing());
+                    ImGui::BeginChild("##suggestions", ImVec2(ImGui::GetItemRectSize().x, height), true);
+                    for (int i = 0; i < (int)suggestions.size(); i++)
+                    {
+                        bool is_sel = (i == go_to_sel);
+                        if (is_sel) ImGui::SetScrollHereY();
+                        if (ImGui::Selectable(suggestions[i].display.c_str(), is_sel))
+                        {
+                            go_to_sel = i;
+                            strncpy(go_to_buf, suggestions[i].insert_text.c_str(), sizeof(go_to_buf) - 1);
+                            go_to_buf[sizeof(go_to_buf) - 1] = '\0';
+                            go_to_focus = true;
+                        }
+                    }
+                    ImGui::EndChild();
+                }
+
+                ImGui::Separator();
+
+                // Re-parse after InputText (buffer may have changed from user typing)
+                book_id = -1; chapter = 1; verse = -1;
+                valid = parse_reference(go_to_buf, data, book_id, chapter, verse);
+
+                // Navigation: Enter navigates only with a complete book chapter:verse reference
+                if (enter_pressed && !enter_accepted && valid && verse >= 1)
+                {
+                    nav_book = book_id;
+                    nav_chapter = chapter;
+                    nav_verse = verse;
+                    g_tree_inited = false;
+                    g_scroll_to_verse = true;
+                    show_go_to_dialog = false;
+                }
+
+                if (valid)
+                {
+                    ImGui::Text("Navigate to:  %s %d:%d", book_name(data, book_id), chapter, verse >= 0 ? verse : 1);
+                    if (ImGui::Button("Go") && !enter_accepted)
+                    {
+                        nav_book = book_id;
+                        nav_chapter = chapter;
+                        nav_verse = verse;
+                        g_tree_inited = false;
+                        g_scroll_to_verse = true;
+                        show_go_to_dialog = false;
+                    }
+                }
+                else if (strlen(go_to_buf) > 0)
+                {
+                    ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Unrecognized reference");
+                }
+                else
+                {
+                    ImGui::TextDisabled("Type a book name, then chapter:verse");
+                }
+            }
+            ImGui::End();
+        }
+
         // Navigation history dialog
         if (show_history_dialog)
         {
@@ -1303,6 +1695,11 @@ int main(int, char**)
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Navigation History", &show_history_dialog);
             {
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    show_history_dialog = false;
+                }
+
                 ImGui::Text("%zu entries", nav_history.size());
                 ImGui::Separator();
                 ImGui::BeginChild("##history", ImVec2(-FLT_MIN, -FLT_MIN), true);
@@ -1384,11 +1781,11 @@ int main(int, char**)
                     {
                         for (auto& b : t.books)
                         {
-                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                             if (b.id == nav_book)
                                 b_flags |= ImGuiTreeNodeFlags_Selected;
                             bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
-                            if (ImGui::IsItemClicked())
+                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                             {
                                 nav_book = b.id;
                                 nav_chapter = 1;
@@ -1400,11 +1797,11 @@ int main(int, char**)
                                 {
                                     char ch_label[32];
                                     snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
-                                    ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                                     if (b.id == nav_book && c.num == nav_chapter)
                                         c_flags |= ImGuiTreeNodeFlags_Selected;
                                     bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
-                                    if (ImGui::IsItemClicked())
+                                    if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                     {
                                         nav_book = b.id;
                                         nav_chapter = c.num;
@@ -1422,7 +1819,7 @@ int main(int, char**)
                                                 v_flags |= ImGuiTreeNodeFlags_Selected;
                                             ImGui::TreeNodeEx(v_label, v_flags);
                                             ImGui::PopID();
-                                            if (ImGui::IsItemClicked())
+                                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                             {
                                                 nav_book = b.id;
                                                 nav_chapter = c.num;
@@ -1435,7 +1832,7 @@ int main(int, char**)
                                             if (b.id == nav_book && c.num == nav_chapter && nav_verse == -1)
                                                 cn_flags |= ImGuiTreeNodeFlags_Selected;
                                             ImGui::TreeNodeEx("Chapter Note", cn_flags);
-                                            if (ImGui::IsItemClicked())
+                                            if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                             {
                                                 nav_book = b.id;
                                                 nav_chapter = c.num;
@@ -1485,7 +1882,6 @@ int main(int, char**)
                         nav_verse = e.verse;
                         g_tree_inited = false;
                         g_scroll_to_verse = true;
-                        show_bookmarks_dialog = false;
                     }
                     ImGui::SameLine();
                     char del_id[32];
@@ -1655,17 +2051,6 @@ int main(int, char**)
             ImGui::Begin("Treeview");
 
             const auto& tree_data = get_translation(def_translat);
-            if (ImGui::SmallButton("Expand All"))
-            {
-                g_expand_all = true;
-                g_collapse_all = false;
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Collapse All"))
-            {
-                g_collapse_all = true;
-                g_expand_all = false;
-            }
             if (g_collapse_all)
             {
                 for (auto& t : tree_data)
@@ -1722,7 +2107,7 @@ int main(int, char**)
                 {
                     for (auto& b : t.books)
                     {
-                        ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                        ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                         if (b.id == nav_book)
                         {
                             b_flags |= ImGuiTreeNodeFlags_Selected;
@@ -1731,7 +2116,7 @@ int main(int, char**)
                         if (!g_collapse_all && g_expand_all)
                             ImGui::SetNextItemOpen(true);
                         bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
-                        if (ImGui::IsItemClicked())
+                        if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                         {
                             nav_book = b.id;
                             nav_chapter = 1;
@@ -1743,7 +2128,7 @@ int main(int, char**)
                             {
                                 char ch_label[32];
                                 snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
-                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                                 if (b.id == nav_book && c.num == nav_chapter)
                                 {
                                     c_flags |= ImGuiTreeNodeFlags_Selected;
@@ -1752,7 +2137,7 @@ int main(int, char**)
                                 if (!g_collapse_all && g_expand_all)
                                     ImGui::SetNextItemOpen(false);
                                 bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
-                                if (ImGui::IsItemClicked())
+                                if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                 {
                                     nav_book = b.id;
                                     nav_chapter = c.num;
@@ -1775,7 +2160,7 @@ int main(int, char**)
                                             ImGui::ScrollToItem();
                                             g_scroll_to_verse = false;
                                         }
-                                        if (ImGui::IsItemClicked())
+                                        if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
                                         {
                                             nav_book = b.id;
                                             nav_chapter = c.num;
@@ -1809,15 +2194,14 @@ int main(int, char**)
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Update and Render additional Platform Windows
-        // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
-        //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
-        // if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-        // {
-        //     GLFWwindow* backup_current_context = glfwGetCurrentContext();
-        //     ImGui::UpdatePlatformWindows();
-        //     ImGui::RenderPlatformWindowsDefault();
-        //     glfwMakeContextCurrent(backup_current_context);
-        // }
+        // Must be called every frame (UpdatePlatformWindows self-guards when viewports are disabled)
+        // to keep internal frame tracking in sync.
+        {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
 
         glfwSwapBuffers(window);
     }
@@ -1840,7 +2224,7 @@ int main(int, char**)
 
     // Store custom state
     {
-        FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
+        FILE* f = fopen((exe_dir() + "/scriptorioc_state.ini").c_str(), "w");
         if (f)
         {
             fprintf(f, "[default_translation]\n%s\n", def_translat.c_str());
@@ -1855,7 +2239,9 @@ int main(int, char**)
             fprintf(f, "[show_notes_explorer]\n%d\n", show_notes_explorer ? 1 : 0);
             fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
             fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
+            fprintf(f, "[allow_undock]\n%d\n", allow_undock ? 1 : 0);
             fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
+            fprintf(f, "[bookmarks]\n%d\n", show_bookmarks_dialog ? 1 : 0);
             fclose(f);
         }
     }

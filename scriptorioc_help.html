@@ -1,7 +1,7 @@
 <!DOCTYPE html><html><head>
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1" name="viewport">
-<title>Tomewell Help</title>
+<title>Scriptorioc Help</title>
 
 <!--
 
@@ -658,24 +658,24 @@
 
             <div class="search-dialog" id="searchDialog" style="display: none;">
                 <input id="searchInput" placeholder="Search... (# for tags, #: regex, +: words)" type="text">
-                <div class="search-results" id="searchList"><div class="selected">Other Options</div></div>
+                <div class="search-results" id="searchList"><div style="color: var(--dim);">(no matching nodes)</div></div>
             </div>
 
             <div class="search-dialog" id="linkSearchDialog" style="display: none;">
                 <input id="linkSearchInput" placeholder="Search to insert link..." type="text">
-                <div class="search-results" id="linkSearchList"></div>
+                <div class="search-results" id="linkSearchList"><div>Regular Expression Searches</div><div class="selected">REGEX Cheat Sheet</div></div>
             </div>
 
-            <div class="search-dialog" id="helpDialogUnified" style="display:none;">
+            <div class="search-dialog" id="helpDialogUnified" style="display: none;">
               <input id="helpFilter" type="text" placeholder="Filter help (Start with : to search keys only)...">
-              <div id="helpResults" class="search-results"></div>
+              <div id="helpResults" class="search-results"><div><b>#</b> <span class="dim">(TREE) - </span>Show note links dialog</div><div><b>X</b> <span class="dim">(TREE) - </span>Show broken note links</div><div><b>Control+'</b> <span class="dim">(INSERT) - </span>Insert Link</div></div>
               <p><a href="https://scribboleth.infinityfreeapp.com/" target="_blank">Full Help System</a></p>
               <p style="margin-top:6px;">Press ESC to close.</p>
             </div>
 
             <div id="linksDialog" ondblclick="closeLinksDialog();" style="display: none;">
                 <h3>Links in Note</h3>
-                <div id="linksList"><a href="#" data-node-id="kqr4o4g3" class="selected">The Options Dialog</a></div>
+                <div id="linksList"><a href="#" data-node-id="42rdwy62" class="">Default Translation</a><a href="#" data-node-id="kjgogbro" class="selected">Adding New Translations</a></div>
             </div>
 
             <div id="marksDialog" style="display: none;">
@@ -689,7 +689,7 @@
                 </p>
             </div>
 
-            <div id="replaceDialog" style="display: none;">
+            <div id="replaceDialog" style="display: none; top: 15%; left: 5px; width: 230px;">
                 <h3>Find<span id="ttlReplace"> &amp; Replace<span></span></span></h3>
                 <label id="lblFind" for="searchText">Find</label>
                 <input id="searchText" type="text">
@@ -702,13 +702,15 @@
                     </div>
                 </div>
                 <div id="replaceResults">Replaced 1 occurrence(s).</div>
-                <div id="findResults" style="margin-top:10px; max-height:200px; overflow:auto; font-family:monospace; white-space:pre-wrap;"></div>
+                <div id="findResults" style="margin-top:10px; max-height:200px; overflow:auto; font-family:monospace; white-space:pre-wrap;"><div class="find-item" data-idx="0" style="cursor: pointer; padding: 2px; overflow: auto; font-size: 60%; background: var(--sel-bg);">
+                                    &lt;<span class="find-highlight">Tomewell</span> folder&gt;/translations/done/
+                                   </div></div>
             </div>
 
             <div id="historyDialog" style="display: none;">
                 <h3>History</h3>
                 <div class="history-content">
-                    <div id="historyList"></div>
+                    <div id="historyList"><div class="selected" style="background: var(--sel-bg);">REGEX Cheat Sheet</div><div>Regular Expression Searches</div><div>Notes</div><div>Other Translations</div><div>Adding New Translations</div><div>Tome Well</div><div>Default Translation</div></div>
                 </div>
             </div>
 
@@ -723,9 +725,9 @@
                 <p style="color:var(--dim); font-size:0.9em;">Press Enter to save, Esc to cancel.</p>
             </div>
 
-            <div id="versionDialog" class="search-dialog" style="display:none;width:300px;max-width:90vw;">
+            <div id="versionDialog" class="search-dialog" style="display: none; width: 300px; max-width: 90vw;">
                 <h3>Version</h3>
-                <p>Current Version: <span id="versionNumber"></span></p>
+                <p>Current Version: <span id="versionNumber">1.0.6</span></p>
             </div>
 
             <div id="themePickerDialog" class="search-dialog" style="display:none;width:350px;max-width:90vw;">
@@ -735,13 +737,13 @@
             </div>
 
 
-            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Tome Well</span></div></li><li><div class="node selected"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Features</span></div></li></ul></aside>
+            <aside class="tree" id="tree" onclick="closeDialogs(); activateTree();"><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Scriptorioc</span></div></li><li><div class="node"><span class="twisty"><svg width="10" height="10" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><path d="M1 3 L5 7 L9 3 Z" fill="currentColor"></path></svg></span><span class="title">Features</span></div><ul><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Default Translation</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Go To Reference</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Other Translations</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Notes</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Regular Expression Searches</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Undocking</span></div></li></ul></li><li><div class="node"><span class="twisty"><svg width="10" height="10" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><path d="M1 3 L5 7 L9 3 Z" fill="currentColor"></path></svg></span><span class="title">Advanced</span></div><ul><li><div class="node selected"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">Adding New Translations</span></div></li><li><div class="node"><span class="twisty"><svg width="6" height="6" viewBox="0 0 6 6" xmlns="http://www.w3.org/2000/svg"><circle cx="3" cy="3" r="1" fill="currentColor"></circle></svg></span><span class="title">REGEX Cheat Sheet</span></div></li></ul></li></ul></aside>
             <section class="editor">
                 <div id="statusBar" class="status" onclick="closeDialogs();" ondblclick="toggleMobileMenu();" title="Double click to toggle Mobile Mode">
                     <span class="pill" id="mode" style="display: block;">TREE</span>
-                    <span class="pill" id="kind">FOLDER</span>
-                    <span class="dim" id="path">/</span>
-                    <span class="pill" id="msg"></span>
+                    <span class="pill" id="kind">NOTE</span>
+                    <span class="dim" id="path">/Advanced</span>
+                    <span class="pill visible" id="msg">Saved successfully</span>
                 </div>
                 <textarea id="editorArea" spellcheck="false" class="" readonly="readonly"></textarea>
             </section>
@@ -762,24 +764,121 @@
             let treeData = [
   {
     "id": "ig7cwz7v",
-    "title": "Tome Well",
-    "content": "Tome Well\n\nTomewell is an advanced Bible study and research tool that is open-source and available for Linux as well as Windows.\n\nIts interface is flexible and powerful. YOU can decide what tools you want to see and how you want them laid out. AND the next time you launch Tomewell, your layout will be restored just as you had defined it.",
+    "title": "Scriptorioc",
+    "content": "Scriptorioc\n\nScriptorioc is an advanced Bible study and research tool that is open-source and available for Linux as well as Windows.\n\nIts interface is flexible and powerful. YOU can decide what tools you want to see and how you want them laid out. AND the next time you launch Scriptorioc, your layout will be restored just as you had defined it.\n\n__| Translations |__\n\nWhen Scriptorioc is launched a window is displayed using the _Default Translation_ however you can add any number of other translations.\nTo do so, see: _Adding New Translations_",
     "children": [],
-    "expanded": true
+    "expanded": false
   },
   {
     "id": "igs2yhxb",
     "title": "Features",
     "content": "",
-    "children": [],
+    "children": [
+      {
+        "id": "42rdwy62",
+        "title": "Default Translation",
+        "content": "Default Translation\n\nScriptorioc displays a default translation when you launch it for the first time. This translation is the American Standard Version.\nThis is an open source translation.\n\nYou can change this using the drop down list in the Main Translation window.\n\nNote:\nIt is possible to add other translations, to see how you can do this see _Adding New Translations_",
+        "children": [],
+        "expanded": false
+      },
+      {
+        "id": "zj3qctg6",
+        "title": "Go To Reference",
+        "content": "Go To Reference\n\nUsing:\n\nCtrl+G\n\nYou can quickly navigate to a specific Book, Chapter, and Verse, using the format:\n\n<book name> <chapter>:<verse>\n\nFor example:\n\nGenesis 3:1",
+        "children": [],
+        "expanded": true
+      },
+      {
+        "id": "w7476ikx",
+        "title": "Other Translations",
+        "content": "Other Translations\n\nScriptorioc allows you to add whatever translation you like. See:\n\n_Adding New Translations_",
+        "children": [],
+        "expanded": true
+      },
+      {
+        "id": "4apemz2d",
+        "title": "Notes",
+        "content": "Notes\n\nScriptorioc has a notes tool that allows you to create notes either on a chapter level or a specific verse level.\nNotes are stored within a single data file. So ALL of your notes are kept within one file, however you can have as many notes databases as you like.\n\nTo create, edit, or clear out notes, first display the notes window:\n\nFile > Show Notes\n\nThen you can position that window however you like.\nNavigate to either the chapter or the verse you want to add a note to - Type the note text you want.\n\nTo clear notes, simply select all of the note text and delete it.\n\n\nTo save your notes hit:\n\nCtrl+S to save the notes update.\nCtrl+Shift+S to save the notes database as a different file.",
+        "children": [],
+        "expanded": true
+      },
+      {
+        "id": "cjz8i13b",
+        "title": "Regular Expression Searches",
+        "content": "Regular Expression Searches\n\nUsing Ctrl+F you can search the defualt translation AND any other translation windows that are open.\n\nBUT!!\n\nYou can significantly increase the power of your Bible searches by adding a prefix to your search:\n\nr:\n\nIf your search begins with: r:  - this will allow you to use a Regular Expression (REGEX) for your search.\n\nTo reference the power of REGEX, see:\n\n_REGEX Cheat Sheet_",
+        "children": [],
+        "expanded": false
+      },
+      {
+        "id": "eo4mac3o",
+        "title": "Undocking",
+        "content": "Undocking\n\nIf you aren't using unique windows managers such as tiling windows managers, you can enable undocking.\n\nThis allows you to drag any Tome Well window outside of the main window and it will become its own independant window.\nThis can be useful if you are using multiple monitors etc.",
+        "children": [],
+        "expanded": true
+      }
+    ],
+    "expanded": true
+  },
+  {
+    "id": "he39ekz2",
+    "title": "Advanced",
+    "content": "",
+    "children": [
+      {
+        "id": "kjgogbro",
+        "title": "Adding New Translations",
+        "content": "Adding New Translations\n\nTome Well looks in the <app dir>/translations/\ndirectory to find its Bible databases.\n\nThese data files are comma separated text files (.csv).\n\nThe format of these files are:\n<testament (1=Old Testament, 2=New testament)>,<book id>,<chapter id>,<verse number>,<book name>,<verse text>\n\nTome Well provides a Python script to help import other translations.\n~/translations/process_csv.py\n\nThis script assumes that you have found a .csv file in the format:\n<book name>,<chapter number>,<verse number>,<verse text>\n\n\nRegardless...\n\nAny translation you want to add needs to be a .csv file with the following format:\n<testament (1=Old Testament, 2=New testament)>,<book id>,<chapter id>,<verse number>,<book name>,<verse text>\n\nAnd you want to place that file in:\n<Scriptorioc folder>/translations/done/\n\n--------------------------------------------------------------------------------\n\nWhen the build.sh, build_windows.sh, or build_win32.bat\n\nscripts are called, the .csv files in ~/translations/done/\n\nare copied to the application's directory, in:\n\n<app>/translations/",
+        "children": [],
+        "expanded": false
+      },
+      {
+        "id": "7ooc8801",
+        "title": "REGEX Cheat Sheet",
+        "content": "REGEX Cheat Sheet\n\nPrefix your search query with r: to use regex.\n\n\n__| Regex Reference Cheat Sheet |__\n\nBASIC MATCHING\ncat\nFind text cat\n\n(\"cat|dog\")\nFind cat OR dog\n\nANY CHARACTER\nc.t\nMatches:\n    cat\n    cut\n    c9t\n\nCHARACTER TYPES\n\\d\nAny digit\nExample: 5\n\n\\w\nAny letter, number, or _\nExample: abc_123\n\nAny whitespace\nExample: space or tab\n\\\n[abc]\\\nMatch a, b, or c\n \n[a-z]\nAny lowercase letter\n \n[A-Z]\nAny uppercase letter\n \n[0-9]\nAny number\n \nREPEATING\n*\nZero or more\n \n+\nOne or more\n \n?\nOptional\n \nExamples:\n \nd+\nAny number\n \na+\na, aa, aaa\n \nw{5}\nExactly 5 characters\n \nd{2,4}\nBetween 2 and 4 digits\n \n \nLINE MATCHING\n^text\nStarts with text\n \ntext$\nEnds with \"text\"\n \n^\\d+$\n  Entire line must be numbers\n \nCOMMON SEARCHES\n\\d+\n  Find numbers\n \n\\bword\\b\n  Find whole word only\n \n(error|warning|fatal)\n  Find any of these words\n \n\\.\\w+$\n  Find file extensions\n \nhttps?://\\S+\n  Find URLs\n \n^\\s*$\n  Find blank lines\n \nESCAPING SPECIAL CHARACTERS\nSpecial characters:\n. ^ $ * + ? ( ) [ ] { } \\ |\n \nUse \\ to search them literally.\n \nExample:\n \n\\.\n  Find a period\n \n\\(\n  Find (\n \nTIPS\n.   = any character\n*   = zero or more\n+   = one or more\n?   = optional\n\\d  = digit\n\\w  = word character\n\\s  = whitespace\n \nRegex is usually case-sensitive.\nStart simple and build from there.\n \n\n__| More Examples |__\n\nExample:   r:\\d+\nFinds verses containing one or more digits.\n \nExample:   r:and|or\nFinds verses containing \"and\" or \"or\".\n \nExample:   r:^Blessed\nFinds verses starting with \"Blessed\".\n \nExample:   r:blessed$\nFinds verses ending with \"blessed\".",
+        "children": [],
+        "expanded": false
+      }
+    ],
     "expanded": true
   }
 ];
             let bookmarks = [];
             let historyStack = [
     {
+        "id": "7ooc8801",
+        "title": "REGEX Cheat Sheet"
+    },
+    {
+        "id": "eo4mac3o",
+        "title": "Undocking"
+    },
+    {
+        "id": "cjz8i13b",
+        "title": "Regular Expression Searches"
+    },
+    {
+        "id": "zj3qctg6",
+        "title": "Go To Reference"
+    },
+    {
         "id": "ig7cwz7v",
-        "title": "Tome Well"
+        "title": "Scriptorioc"
+    },
+    {
+        "id": "42rdwy62",
+        "title": "Default Translation"
+    },
+    {
+        "id": "w7476ikx",
+        "title": "Other Translations"
+    },
+    {
+        "id": "4apemz2d",
+        "title": "Notes"
+    },
+    {
+        "id": "kjgogbro",
+        "title": "Adding New Translations"
     }
 ];
 
@@ -794,7 +893,7 @@
                 "\\);": "^^^func^^^"
             };
 
-            let nodePort = 3012;
+            let nodePort = 3013;
 
             let currentEditorNodeId = null;
 
@@ -805,7 +904,7 @@
             let copiedNoteId = null;
             let importedFileName = null;
 
-            let fileName = "tomewell_help";
+            let fileName = "scriptorioc_help";
             let curVersion = "1.0.6"
             let showInitHelp = false;
             let headerTemplate = "__| ^*^ |__";
@@ -4583,12 +4682,12 @@
                     // Ensure correct replacement of the old database
                     let htmlContent = "<!DOCTYPE html>" + htmlDoc.outerHTML;
                     if (saveName) {
-                        htmlContent = htmlContent.replace(/let\s+fileName\s*=\s*"([^"]*)";/, `let fileName = "${name}";`);
+                        htmlContent = htmlContent.replace(/let\s+fileName\s*=\s*"([^"]*)";/, `let fileName = "scriptorioc_help";`);
                     } else {
                         // fileName
                         htmlContent = htmlContent.replace(
                         /let\s+fileName\s*=\s*"([^"]*)";/,
-                        `let fileName = "${fileName}";`
+                        `let fileName = "scriptorioc_help";`
                         );
                     }
 
@@ -5400,6 +5499,7 @@
                 }, 3000);                               // wait 3s after last change
             }
 </script>
+
 
 
 
