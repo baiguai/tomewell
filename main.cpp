@@ -1138,10 +1138,7 @@ int main(int, char**)
                         if (!translation_windows[i].open) { translation_windows[i].open = true; break; }
                     }
                 }
-                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
-                {
-                    show_notes = true;
-                }
+
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("New Database", "Ctrl+N"))
@@ -1191,6 +1188,35 @@ int main(int, char**)
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
+                {
+                    glfwSetWindowShouldClose(window, true);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Edit"))
+            {
+                if (ImGui::MenuItem("Expand All", "Ctrl+Shift+E"))
+                {
+                    g_expand_all = true;
+                    g_collapse_all = false;
+                }
+                if (ImGui::MenuItem("Collapse All", "Ctrl+Shift+C"))
+                {
+                    g_expand_all = false;
+                    g_collapse_all = true;
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Show Notes", "Ctrl+Shift+N"))
+                {
+                    show_notes = true;
+                }
+
                 if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
                 {
                     show_notes_explorer = true;
@@ -1223,26 +1249,6 @@ int main(int, char**)
                     show_bookmarks_dialog = !show_bookmarks_dialog;
                 }
 
-                ImGui::Separator();
-
-                if (ImGui::MenuItem("Quit", "Ctrl+Q"))
-                {
-                    glfwSetWindowShouldClose(window, true);
-                }
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Edit"))
-            {
-                if (ImGui::MenuItem("Expand All", "Ctrl+Shift+E"))
-                {
-                    g_expand_all = true;
-                    g_collapse_all = false;
-                }
-                if (ImGui::MenuItem("Collapse All", "Ctrl+Shift+C"))
-                {
-                    g_expand_all = false;
-                    g_collapse_all = true;
-                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Search"))
@@ -1430,7 +1436,6 @@ int main(int, char**)
             {
                 if (ImGui::IsKeyPressed(ImGuiKey_Escape))
                 {
-                    show_search = false;
                     search_buf[0] = '\0';
                     search_results.clear();
                     g_highlight_query.clear();
@@ -1690,6 +1695,11 @@ int main(int, char**)
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Navigation History", &show_history_dialog);
             {
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                {
+                    show_history_dialog = false;
+                }
+
                 ImGui::Text("%zu entries", nav_history.size());
                 ImGui::Separator();
                 ImGui::BeginChild("##history", ImVec2(-FLT_MIN, -FLT_MIN), true);
