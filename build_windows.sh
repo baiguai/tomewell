@@ -6,7 +6,7 @@ DEPS_DIR="$SCRIPT_DIR/deps"
 IMGUI_DIR="$DEPS_DIR/imgui"
 GLFW_DIR="$DEPS_DIR/glfw-mingw"
 BIN_DIR="$SCRIPT_DIR/bin/windows"
-EXE="tomewell.exe"
+EXE="scriptorioc.exe"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -91,7 +91,7 @@ rm -rf "$BIN_DIR/translations"
 rsync -a --exclude='*.py' "$SCRIPT_DIR/translations/done/" "$BIN_DIR/translations/"
 
 echo -e "${YELLOW}==> Copying help file...${NC}"
-cp "$SCRIPT_DIR/tomewell_help.html" "$BIN_DIR/"
+cp "$SCRIPT_DIR/scriptorioc_help.html" "$BIN_DIR/"
 
 echo -e "${GREEN}==> Done: $FULL_EXE${NC}"
 echo -e "${GREEN}    (copy the whole bin/windows/ folder to a Windows machine to run)${NC}"

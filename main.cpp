@@ -830,7 +830,7 @@ int main(int, char**)
 
     // Load custom state
     {
-        std::string state_path = exe_dir() + "/tomewell_state.ini";
+        std::string state_path = exe_dir() + "/scriptorioc_state.ini";
         FILE* f = fopen(state_path.c_str(), "r");
         if (f)
         {
@@ -1298,16 +1298,16 @@ int main(int, char**)
                     show_history_dialog = false;
 
                     g_data_path = exe_dir() + "/notes.json";
-                    remove((exe_dir() + "/tomewell_state.ini").c_str());
+                    remove((exe_dir() + "/scriptorioc_state.ini").c_str());
                     reset_layout = true;
                 }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help"))
             {
-                if (ImGui::MenuItem("Tomewell Help"))
+                if (ImGui::MenuItem("Scriptorioc Help"))
                 {
-                    std::string help_path = exe_dir() + "/tomewell_help.html";
+                    std::string help_path = exe_dir() + "/scriptorioc_help.html";
 #ifdef _WIN32
                     std::string cmd = "start \"\" \"" + help_path + "\"";
 #else
@@ -1771,7 +1771,7 @@ int main(int, char**)
                     {
                         for (auto& b : t.books)
                         {
-                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                            ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                             if (b.id == nav_book)
                                 b_flags |= ImGuiTreeNodeFlags_Selected;
                             bool b_open = ImGui::TreeNodeEx(b.name.c_str(), b_flags);
@@ -1787,7 +1787,7 @@ int main(int, char**)
                                 {
                                     char ch_label[32];
                                     snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
-                                    ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                                     if (b.id == nav_book && c.num == nav_chapter)
                                         c_flags |= ImGuiTreeNodeFlags_Selected;
                                     bool c_open = ImGui::TreeNodeEx(ch_label, c_flags);
@@ -2097,7 +2097,7 @@ int main(int, char**)
                 {
                     for (auto& b : t.books)
                     {
-                        ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+                        ImGuiTreeNodeFlags b_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                         if (b.id == nav_book)
                         {
                             b_flags |= ImGuiTreeNodeFlags_Selected;
@@ -2118,7 +2118,7 @@ int main(int, char**)
                             {
                                 char ch_label[32];
                                 snprintf(ch_label, sizeof(ch_label), "Chapter %d", c.num);
-                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                                ImGuiTreeNodeFlags c_flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
                                 if (b.id == nav_book && c.num == nav_chapter)
                                 {
                                     c_flags |= ImGuiTreeNodeFlags_Selected;
@@ -2214,7 +2214,7 @@ int main(int, char**)
 
     // Store custom state
     {
-        FILE* f = fopen((exe_dir() + "/tomewell_state.ini").c_str(), "w");
+        FILE* f = fopen((exe_dir() + "/scriptorioc_state.ini").c_str(), "w");
         if (f)
         {
             fprintf(f, "[default_translation]\n%s\n", def_translat.c_str());
