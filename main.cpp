@@ -1904,7 +1904,7 @@ int main(int, char**)
         if (show_special_search_dialog)
         {
             ImGui::SetNextWindowBgAlpha(1.0f);
-            ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
             ImGui::Begin("Special Search Commands", &show_special_search_dialog);
             if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape))
                 show_special_search_dialog = false;
