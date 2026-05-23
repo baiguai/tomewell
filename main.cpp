@@ -798,7 +798,7 @@ int main(int, char**)
     static int note_chapter = -1;
     static int note_verse = -1;
 
-    static const char* filters[] = {"*.json"};
+    static const char* filters[] = {"*.scrp"};
 
     // Search state
     static bool show_go_to_dialog = false;
@@ -914,7 +914,7 @@ int main(int, char**)
     // Load/create data file
     {
         if (g_data_path.empty())
-            g_data_path = exe_dir() + "/notes.json";
+            g_data_path = exe_dir() + "/notes.scrp";
         std::ifstream test(g_data_path);
         if (!test.is_open())
             create_default_data_file(g_data_path);
@@ -1038,7 +1038,7 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_N))
         {
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-            const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+            const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "Scrp files");
             if (fp)
             {
                 g_data_path = fp;
@@ -1060,7 +1060,7 @@ int main(int, char**)
 
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_O))
         {
-            const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+            const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "Scrp files", 0);
             if (fp)
             {
                 flush_note(note_book, note_chapter, note_verse, note_edit_buf);
@@ -1108,7 +1108,7 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-            const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+            const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "Scrp files");
             if (fp)
             {
                 g_data_path = fp;
@@ -1144,7 +1144,7 @@ int main(int, char**)
                 if (ImGui::MenuItem("New Database", "Ctrl+N"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-                    const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "JSON files");
+                    const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "Scrp files");
                     if (fp)
                     {
                         g_data_path = fp;
@@ -1157,7 +1157,7 @@ int main(int, char**)
                 }
                 if (ImGui::MenuItem("Open Database", "Ctrl+O"))
                 {
-                    const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "JSON files", 0);
+                    const char* fp = tinyfd_openFileDialog("Open Database", "", 1, filters, "Scrp files", 0);
                     if (fp)
                     {
                         flush_note(note_book, note_chapter, note_verse, note_edit_buf);
@@ -1181,7 +1181,7 @@ int main(int, char**)
                 if (ImGui::MenuItem("Save Database As", "Ctrl+Shift+S"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-                    const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "JSON files");
+                    const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "Scrp files");
                     if (fp)
                     {
                         g_data_path = fp;
@@ -1303,7 +1303,7 @@ int main(int, char**)
                     show_bookmarks_dialog = false;
                     show_history_dialog = false;
 
-                    g_data_path = exe_dir() + "/notes.json";
+                    g_data_path = exe_dir() + "/notes.scrp";
                     remove((exe_dir() + "/scriptorioc_state.ini").c_str());
                     reset_layout = true;
                 }
