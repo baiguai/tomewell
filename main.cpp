@@ -62,6 +62,20 @@ std::string timestamp()
     return buf;
 }
 
+
+static std::string ensure_scrp_extension(const std::string& path)
+{
+    size_t slash = path.find_last_of("/\\");
+    size_t dot = path.find_last_of('.');
+
+    // No extension, or dot occurs before last slash
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash))
+        return path + ".scrp";
+
+    return path;
+}
+
+
 std::vector<DataEntry> load_data_file(const std::string& path)
 {
     std::vector<DataEntry> entries;
@@ -225,7 +239,8 @@ struct NotesTreeChapter { int num; bool has_chapter_note; std::vector<NotesTreeV
 struct NotesTreeBook { int id; std::string name; std::vector<NotesTreeChapter> chapters; };
 struct NotesTreeTestament { int num; std::string label; std::vector<NotesTreeBook> books; };
 static std::vector<NotesTreeTestament> g_notes_tree;
-static bool g_notes_tree_dirty = true;
+static bool g_notes_tree_dirty { true };
+static bool g_search_fired { false };
 
 static void rebuild_notes_tree(const std::vector<TestamentInfo>& bible_data)
 {
@@ -1041,7 +1056,7 @@ int main(int, char**)
             const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "Scrp files");
             if (fp)
             {
-                g_data_path = fp;
+                g_data_path = ensure_scrp_extension(fp);
                 g_data_entries.clear();
                 note_edit_buf[0] = '\0';
                 note_book = note_chapter = note_verse = -1;
@@ -1070,7 +1085,7 @@ int main(int, char**)
                 {
                     t.close();
                     g_data_entries = load_data_file(fp);
-                    g_data_path = fp;
+                    g_data_path = ensure_scrp_extension(fp);
                     note_book = note_chapter = note_verse = -1;
                     g_notes_tree_dirty = true;
                 }
@@ -1111,7 +1126,7 @@ int main(int, char**)
             const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "Scrp files");
             if (fp)
             {
-                g_data_path = fp;
+                g_data_path = ensure_scrp_extension(fp);
                 save_data_file(g_data_path, g_data_entries);
             }
         }
@@ -1147,7 +1162,7 @@ int main(int, char**)
                     const char* fp = tinyfd_saveFileDialog("New Database", g_data_path.c_str(), 1, filters, "Scrp files");
                     if (fp)
                     {
-                        g_data_path = fp;
+                        g_data_path = ensure_scrp_extension(fp);
                         g_data_entries.clear();
                         note_edit_buf[0] = '\0';
                         note_book = note_chapter = note_verse = -1;
@@ -1167,7 +1182,7 @@ int main(int, char**)
                         {
                             t.close();
                             g_data_entries = load_data_file(fp);
-                            g_data_path = fp;
+                            g_data_path = ensure_scrp_extension(fp);
                             note_book = note_chapter = note_verse = -1;
                             g_notes_tree_dirty = true;
                         }
@@ -1184,7 +1199,7 @@ int main(int, char**)
                     const char* fp = tinyfd_saveFileDialog("Save Database As", g_data_path.c_str(), 1, filters, "Scrp files");
                     if (fp)
                     {
-                        g_data_path = fp;
+                        g_data_path = ensure_scrp_extension(fp);
                         save_data_file(g_data_path, g_data_entries);
                     }
                 }
@@ -1255,6 +1270,7 @@ int main(int, char**)
             {
                 if (ImGui::MenuItem("Search Bible", "Ctrl+F"))
                 {
+                    g_search_fired = false;
                     show_search = true;
                 }
 
@@ -1451,6 +1467,7 @@ int main(int, char**)
 
                 bool cur_is_regex = (strlen(search_buf) >= 2 && (search_buf[0] == 'r' || search_buf[0] == 'R') && search_buf[1] == ':');
                 ImGui::InputText("Query", search_buf, sizeof(search_buf));
+
                 if (cur_is_regex)
                 {
                     ImGui::SameLine();
@@ -1459,8 +1476,10 @@ int main(int, char**)
                 {
                     static std::string prev_query;
                     std::string cur = search_buf;
-                    if (cur != prev_query)
+                    // if (cur != prev_query)
+                    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false))
                     {
+                        g_search_fired = true;
                         prev_query = cur;
                         search_results.clear();
                         g_highlight_query.clear();
@@ -1546,7 +1565,7 @@ int main(int, char**)
                     }
                     ImGui::EndChild();
                 }
-                else if (strlen(search_buf) > 0 && search_results.empty())
+                else if (strlen(search_buf) > 0 && search_results.empty() && g_search_fired)
                 {
                     if (!g_regex_error.empty())
                         ImGui::TextColored(ImVec4(1,0.3f,0.3f,1), "Regex error: %s", g_regex_error.c_str());
