@@ -12,6 +12,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# -----------------------------
+# Build configuration
+# -----------------------------
+BUILD_TYPE="debug"
+
+if [[ "${1:-}" == "r" ]]; then
+    BUILD_TYPE="release"
+fi
+
+echo -e "${YELLOW}==> Build type: $BUILD_TYPE${NC}"
+
 echo -e "${YELLOW}==> Checking dependencies...${NC}"
 
 if ! pkg-config --exists glfw3 2>/dev/null; then
@@ -37,9 +48,20 @@ fi
 
 echo -e "${YELLOW}==> Building...${NC}"
 mkdir -p "$BIN_DIR"
+
 FULL_EXE="$BIN_DIR/$EXE"
-make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$FULL_EXE" clean 2>/dev/null || true
-make -C "$SCRIPT_DIR" IMGUI_DIR="$IMGUI_DIR" EXE="$FULL_EXE" -j"$(nproc)"
+
+make -C "$SCRIPT_DIR" \
+    IMGUI_DIR="$IMGUI_DIR" \
+    EXE="$FULL_EXE" \
+    CONFIG="$BUILD_TYPE" \
+    clean 2>/dev/null || true
+
+make -C "$SCRIPT_DIR" \
+    IMGUI_DIR="$IMGUI_DIR" \
+    EXE="$FULL_EXE" \
+    CONFIG="$BUILD_TYPE" \
+    -j"$(nproc)"
 
 echo -e "${YELLOW}==> Copying translations...${NC}"
 rm -rf "$BIN_DIR/translations"

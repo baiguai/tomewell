@@ -13,12 +13,33 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# -----------------------------
+# Build configuration
+# -----------------------------
+BUILD_TYPE="debug"
+
+if [[ "${1:-}" == "r" ]]; then
+    BUILD_TYPE="release"
+fi
+
+echo -e "${YELLOW}==> Build type: $BUILD_TYPE${NC}"
+
 CXX="x86_64-w64-mingw32-g++"
 CC="x86_64-w64-mingw32-gcc"
-BASE_FLAGS="-O2 -I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
-CXXFLAGS="-std=c++11 $BASE_FLAGS"
-CFLAGS="$BASE_FLAGS"
+
+BASE_FLAGS="-I$IMGUI_DIR -I$IMGUI_DIR/backends -I$GLFW_DIR/include -I$DEPS_DIR -I$DEPS_DIR/tinyfiledialogs"
+
+if [[ "$BUILD_TYPE" == "release" ]]; then
+    OPT_FLAGS="-O3 -DNDEBUG"
+else
+    OPT_FLAGS="-O0 -g"
+fi
+
+CXXFLAGS="-std=c++11 $BASE_FLAGS $OPT_FLAGS"
+CFLAGS="$BASE_FLAGS $OPT_FLAGS"
+
 CXXFLAGS_STATIC="-static-libstdc++ -static-libgcc"
+
 LIBS="-L$GLFW_DIR/lib-mingw-w64 -lglfw3 -lgdi32 -lopengl32 -limm32 -lole32 -lcomdlg32"
 
 SOURCES=(

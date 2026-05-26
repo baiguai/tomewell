@@ -24,7 +24,7 @@ OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
-CXXFLAGS = -std=c++11 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I deps -I deps/tinyfiledialogs
+CXXFLAGS = -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I deps -I deps/tinyfiledialogs
 CXXFLAGS += -g -Wall -Wformat
 LIBS =
 
@@ -46,6 +46,8 @@ ifeq ($(UNAME_S), Linux) #LINUX
 
 	CXXFLAGS += `pkg-config --cflags glfw3`
 	CFLAGS = $(CXXFLAGS)
+	CXXFLAGS += -std=c++11
+	CFLAGS += -std=c11
 endif
 
 ifeq ($(UNAME_S), Darwin) #APPLE
@@ -57,6 +59,8 @@ ifeq ($(UNAME_S), Darwin) #APPLE
 
 	CXXFLAGS += -I/usr/local/include -I/opt/local/include -I/opt/homebrew/include
 	CFLAGS = $(CXXFLAGS)
+	CXXFLAGS += -std=c++11
+	CFLAGS += -std=c11
 endif
 
 ifeq ($(OS), Windows_NT)
@@ -65,11 +69,19 @@ ifeq ($(OS), Windows_NT)
 
 	CXXFLAGS += `pkg-config --cflags glfw3`
 	CFLAGS = $(CXXFLAGS)
+	CXXFLAGS += -std=c++11
+	CFLAGS += -std=c11
 endif
 
 ##---------------------------------------------------------------------
 ## BUILD RULES
 ##---------------------------------------------------------------------
+
+ifeq ($(CONFIG),release)
+    CXXFLAGS += -O3 -DNDEBUG
+else
+    CXXFLAGS += -g -O0
+endif
 
 %.o:%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
