@@ -7,6 +7,7 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
+#include <iostream>
 #include "main.h"
 #include "tinyfiledialogs.h"
 #include <ctime>
@@ -223,10 +224,10 @@ std::vector<TestamentInfo> load_translation(const std::string& path)
 
 static std::string g_highlight_query;
 static std::string g_regex_error;
-static bool g_tree_inited = false;
-static bool g_scroll_to_verse = false;
-static bool g_expand_all = false;
-static bool g_collapse_all = false;
+static bool g_tree_inited { false };
+static bool g_scroll_to_verse { false };
+static bool g_expand_all { false };
+static bool g_collapse_all { false };
 static std::vector<DataEntry> g_data_entries;
 static std::string g_data_path;
 static std::map<std::string, std::vector<TestamentInfo>> s_trans_cache;
@@ -1335,7 +1336,12 @@ int main(int, char**)
 #else
                     std::string cmd = "xdg-open \"" + help_path + "\"";
 #endif
-                    system(cmd.c_str());
+                    int help_result { system(cmd.c_str()) };
+
+                    if (help_result != 0)
+                    {
+                        std::cerr << "Help file call failed\n";
+                    }
                 }
                 if (ImGui::MenuItem("Special Search Commands"))
                 {
@@ -1777,8 +1783,9 @@ int main(int, char**)
 
                 ImGui::Separator();
 
+                static ImGuiInputTextFlags notes_flags = ImGuiInputTextFlags_AllowTabInput;
                 ImGui::InputTextMultiline("##note", note_edit_buf, sizeof(note_edit_buf),
-                    ImVec2(-FLT_MIN, -FLT_MIN));
+                    ImVec2(-FLT_MIN, -FLT_MIN), notes_flags);
             }
             ImGui::End();
         }
