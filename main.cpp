@@ -21,6 +21,8 @@
 #include <ctime>
 #include <cstdlib>
 #include <regex>
+#include <algorithm>
+#include <functional>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -72,6 +74,8 @@ std::string timestamp()
 }
 
 
+static int g_next_study_id = 1;
+
 static std::string ensure_scrp_extension(const std::string& path)
 {
     size_t slash = path.find_last_of("/\\");
@@ -85,7 +89,7 @@ static std::string ensure_scrp_extension(const std::string& path)
 }
 
 
-std::vector<DataEntry> load_data_file(const std::string& path)
+std::vector<DataEntry> load_data_file(const std::string& path, std::vector<StudyNode>* studies)
 {
     std::vector<DataEntry> entries;
     std::ifstream f(path);
@@ -108,12 +112,31 @@ std::vector<DataEntry> load_data_file(const std::string& path)
             e.modified = item.value("modified", "");
             entries.push_back(e);
         }
+        if (studies && j.contains("studies"))
+        {
+            studies->clear();
+            int max_id = 0;
+            auto& sarr = j["studies"];
+            for (auto& item : sarr)
+            {
+                StudyNode sn;
+                sn.id = item.value("id", 0);
+                sn.parent_id = item.value("parent_id", -1);
+                sn.title = item.value("title", "");
+                sn.type = item.value("type", "study");
+                sn.content = item.value("content", "");
+                sn.sort_order = item.value("sort_order", 0);
+                studies->push_back(sn);
+                if (sn.id > max_id) max_id = sn.id;
+            }
+            g_next_study_id = max_id + 1;
+        }
     }
     catch (...) {}
     return entries;
 }
 
-void save_data_file(const std::string& path, const std::vector<DataEntry>& entries)
+void save_data_file(const std::string& path, const std::vector<DataEntry>& entries, const std::vector<StudyNode>& studies)
 {
     nlohmann::json j;
     j["version"] = 1;
@@ -131,6 +154,18 @@ void save_data_file(const std::string& path, const std::vector<DataEntry>& entri
         item["created"] = e.created;
         item["modified"] = e.modified;
         arr.push_back(item);
+    }
+    auto& sarr = j["studies"];
+    for (auto& s : studies)
+    {
+        nlohmann::json item;
+        item["id"] = s.id;
+        item["parent_id"] = s.parent_id;
+        item["title"] = s.title;
+        item["type"] = s.type;
+        item["content"] = s.content;
+        item["sort_order"] = s.sort_order;
+        sarr.push_back(item);
     }
     std::ofstream f(path);
     if (f.is_open()) f << j.dump(2) << "\n";
@@ -250,6 +285,13 @@ struct NotesTreeTestament { int num; std::string label; std::vector<NotesTreeBoo
 static std::vector<NotesTreeTestament> g_notes_tree;
 static bool g_notes_tree_dirty { true };
 static bool g_search_fired { false };
+static std::vector<StudyNode> g_studies;
+static bool show_studies_explorer { false };
+static bool show_study_editor { false };
+static char study_edit_buf[65536] { "" };
+static int study_edit_id { -1 };
+static int g_rename_id { -1 };
+static char g_rename_buf[256] { "" };
 
 
 
@@ -683,6 +725,39 @@ static void flush_note(int book, int chapter, int verse, const char* buf)
     g_notes_tree_dirty = true;
 }
 
+static int find_study_by_id(const std::vector<StudyNode>& studies, int id)
+{
+    for (size_t i = 0; i < studies.size(); i++)
+        if (studies[i].id == id) return (int)i;
+    return -1;
+}
+
+static void flush_study()
+{
+    if (study_edit_id < 0) return;
+    int idx = find_study_by_id(g_studies, study_edit_id);
+    if (idx < 0) return;
+    g_studies[idx].content = study_edit_buf;
+}
+
+static void delete_study_node(int id)
+{
+    if (id == study_edit_id)
+    {
+        study_edit_id = -1;
+        study_edit_buf[0] = '\0';
+    }
+    for (int i = (int)g_studies.size() - 1; i >= 0; i--)
+        if (g_studies[i].parent_id == id)
+            delete_study_node(g_studies[i].id);
+    for (int i = (int)g_studies.size() - 1; i >= 0; i--)
+        if (g_studies[i].id == id)
+        {
+            g_studies.erase(g_studies.begin() + i);
+            break;
+        }
+}
+
 // Main code
 int main(int, char**)
 {
@@ -983,6 +1058,16 @@ int main(int, char**)
                 {
                     if (strlen(buf) > 0) g_data_path = buf;
                 }
+                else if (section == "[show_studies_explorer]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_studies_explorer = (n != 0);
+                }
+                else if (section == "[show_study_editor]")
+                {
+                    int n = 0;
+                    if (sscanf(buf, "%d", &n) == 1) show_study_editor = (n != 0);
+                }
                 else if (section == "[show_menu]")
                 {
                     int n = 0;
@@ -1017,7 +1102,7 @@ int main(int, char**)
             create_default_data_file(g_data_path);
         else
             test.close();
-        g_data_entries = load_data_file(g_data_path);
+        g_data_entries = load_data_file(g_data_path, &g_studies);
     }
 
     // Main loop
@@ -1144,10 +1229,14 @@ int main(int, char**)
             {
                 g_data_path = ensure_scrp_extension(fp);
                 g_data_entries.clear();
+                g_studies.clear();
+                g_next_study_id = 1;
+                study_edit_id = -1;
+                study_edit_buf[0] = '\0';
                 note_edit_buf[0] = '\0';
                 note_book = note_chapter = note_verse = -1;
                 g_notes_tree_dirty = true;
-                save_data_file(g_data_path, g_data_entries);
+                save_data_file(g_data_path, g_data_entries, g_studies);
             }
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_N))
@@ -1157,6 +1246,14 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_X))
         {
             show_notes_explorer = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_U))
+        {
+            show_studies_explorer = true;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_Y))
+        {
+            show_study_editor = true;
         }
 
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_O))
@@ -1170,7 +1267,10 @@ int main(int, char**)
                 if (t.is_open())
                 {
                     t.close();
-                    g_data_entries = load_data_file(fp);
+                    g_studies.clear();
+                    study_edit_id = -1;
+                    study_edit_buf[0] = '\0';
+                    g_data_entries = load_data_file(fp, &g_studies);
                     g_data_path = ensure_scrp_extension(fp);
                     note_book = note_chapter = note_verse = -1;
                     g_notes_tree_dirty = true;
@@ -1180,7 +1280,7 @@ int main(int, char**)
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_S))
         {
             flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-            save_data_file(g_data_path, g_data_entries);
+            save_data_file(g_data_path, g_data_entries, g_studies);
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_D))
         {
@@ -1213,7 +1313,7 @@ int main(int, char**)
             if (fp)
             {
                 g_data_path = ensure_scrp_extension(fp);
-                save_data_file(g_data_path, g_data_entries);
+                save_data_file(g_data_path, g_data_entries, g_studies);
             }
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_C))
@@ -1250,10 +1350,14 @@ int main(int, char**)
                     {
                         g_data_path = ensure_scrp_extension(fp);
                         g_data_entries.clear();
+                        g_studies.clear();
+                        g_next_study_id = 1;
+                        study_edit_id = -1;
+                        study_edit_buf[0] = '\0';
                         note_edit_buf[0] = '\0';
                         note_book = note_chapter = note_verse = -1;
                         g_notes_tree_dirty = true;
-                        save_data_file(g_data_path, g_data_entries);
+                        save_data_file(g_data_path, g_data_entries, g_studies);
                     }
                 }
                 if (ImGui::MenuItem("Open Database", "Ctrl+O"))
@@ -1267,7 +1371,10 @@ int main(int, char**)
                         if (t.is_open())
                         {
                             t.close();
-                            g_data_entries = load_data_file(fp);
+                            g_studies.clear();
+                            study_edit_id = -1;
+                            study_edit_buf[0] = '\0';
+                            g_data_entries = load_data_file(fp, &g_studies);
                             g_data_path = ensure_scrp_extension(fp);
                             note_book = note_chapter = note_verse = -1;
                             g_notes_tree_dirty = true;
@@ -1277,7 +1384,7 @@ int main(int, char**)
                 if (ImGui::MenuItem("Save Database", "Ctrl+S"))
                 {
                     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-                    save_data_file(g_data_path, g_data_entries);
+                    save_data_file(g_data_path, g_data_entries, g_studies);
                 }
                 if (ImGui::MenuItem("Save Database As", "Ctrl+Shift+S"))
                 {
@@ -1286,7 +1393,7 @@ int main(int, char**)
                     if (fp)
                     {
                         g_data_path = ensure_scrp_extension(fp);
-                        save_data_file(g_data_path, g_data_entries);
+                        save_data_file(g_data_path, g_data_entries, g_studies);
                     }
                 }
 
@@ -1321,6 +1428,16 @@ int main(int, char**)
                 if (ImGui::MenuItem("Show Notes Explorer", "Ctrl+Shift+X"))
                 {
                     show_notes_explorer = true;
+                }
+
+                if (ImGui::MenuItem("Show Studies Explorer", "Ctrl+Shift+U"))
+                {
+                    show_studies_explorer = true;
+                }
+
+                if (ImGui::MenuItem("Show Study Editor", "Ctrl+Shift+Y"))
+                {
+                    show_study_editor = true;
                 }
 
                 ImGui::Separator();
@@ -1401,6 +1518,8 @@ int main(int, char**)
                     nav_verse = -1;
                     show_notes = false;
                     show_notes_explorer = false;
+                    show_studies_explorer = false;
+                    show_study_editor = false;
                     show_search = false;
                     show_demo = false;
                     show_bookmarks_dialog = false;
@@ -1969,6 +2088,254 @@ int main(int, char**)
         }
         }
 
+        // Studies Explorer
+        if (show_studies_explorer)
+        {
+            ImGui::SetNextWindowBgAlpha(1.0f);
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Studies Explorer", &show_studies_explorer);
+
+            if (ImGui::BeginPopupContextWindow())
+            {
+                if (ImGui::MenuItem("Create Root Folder"))
+                {
+                    StudyNode sn;
+                    sn.id = g_next_study_id++;
+                    sn.parent_id = -1;
+                    sn.title = "New Folder";
+                    sn.type = "folder";
+                    sn.sort_order = 0;
+                    g_studies.push_back(sn);
+                }
+                if (ImGui::MenuItem("Create Root Study"))
+                {
+                    StudyNode sn;
+                    sn.id = g_next_study_id++;
+                    sn.parent_id = -1;
+                    sn.title = "New Study";
+                    sn.type = "study";
+                    sn.sort_order = 0;
+                    g_studies.push_back(sn);
+                }
+                ImGui::EndPopup();
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("STUDY_NODE"))
+                {
+                    int dragged_id = *(const int*)payload->Data;
+                    int idx = find_study_by_id(g_studies, dragged_id);
+                    if (idx >= 0) g_studies[idx].parent_id = -1;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+            std::function<void(int)> render_node = [&](int par_id) {
+                std::vector<int> children;
+                for (size_t i = 0; i < g_studies.size(); i++)
+                    if (g_studies[i].parent_id == par_id)
+                        children.push_back((int)i);
+                std::sort(children.begin(), children.end(), [&](int a, int b) {
+                    return g_studies[a].sort_order < g_studies[b].sort_order;
+                });
+                for (int ci : children)
+                {
+                    auto& node = g_studies[ci];
+                    ImGui::PushID(node.id);
+                    if (node.type == "folder")
+                    {
+                        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NavLeftJumpsToParent;
+                        bool open = ImGui::TreeNodeEx(node.title.c_str(), flags);
+                        if (ImGui::BeginDragDropSource())
+                        {
+                            ImGui::SetDragDropPayload("STUDY_NODE", &node.id, sizeof(int));
+                            ImGui::Text("Move: %s", node.title.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+                        if (ImGui::BeginDragDropTarget())
+                        {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("STUDY_NODE"))
+                            {
+                                int dragged_id = *(const int*)payload->Data;
+                                if (dragged_id != node.id)
+                                {
+                                    int dragged_idx = find_study_by_id(g_studies, dragged_id);
+                                    if (dragged_idx >= 0)
+                                        g_studies[dragged_idx].parent_id = node.id;
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+                        if (ImGui::BeginPopupContextItem())
+                        {
+                            if (ImGui::MenuItem("Create Folder"))
+                            {
+                                StudyNode sn;
+                                sn.id = g_next_study_id++;
+                                sn.parent_id = node.id;
+                                sn.title = "New Folder";
+                                sn.type = "folder";
+                                sn.sort_order = (int)children.size();
+                                g_studies.push_back(sn);
+                            }
+                            if (ImGui::MenuItem("Create Study"))
+                            {
+                                StudyNode sn;
+                                sn.id = g_next_study_id++;
+                                sn.parent_id = node.id;
+                                sn.title = "New Study";
+                                sn.type = "study";
+                                sn.sort_order = (int)children.size();
+                                g_studies.push_back(sn);
+                            }
+                            ImGui::Separator();
+                            if (ImGui::MenuItem("Rename"))
+                            {
+                                g_rename_id = node.id;
+                                strncpy(g_rename_buf, node.title.c_str(), sizeof(g_rename_buf) - 1);
+                                g_rename_buf[sizeof(g_rename_buf) - 1] = '\0';
+                                ImGui::OpenPopup("Rename Study");
+                            }
+                            if (ImGui::MenuItem("Delete"))
+                            {
+                                flush_study();
+                                delete_study_node(node.id);
+                            }
+                            ImGui::EndPopup();
+                        }
+                        if (open)
+                        {
+                            render_node(node.id);
+                            ImGui::TreePop();
+                        }
+                    }
+                    else
+                    {
+                        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                        if (study_edit_id == node.id)
+                            flags |= ImGuiTreeNodeFlags_Selected;
+                        ImGui::TreeNodeEx(node.title.c_str(), flags);
+                        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                        {
+                            flush_study();
+                            study_edit_id = node.id;
+                            {
+                                const std::string& content = node.content;
+                                size_t len = content.size();
+                                if (len >= sizeof(study_edit_buf)) len = sizeof(study_edit_buf) - 1;
+                                std::memcpy(study_edit_buf, content.c_str(), len);
+                                study_edit_buf[len] = '\0';
+                            }
+                            show_study_editor = true;
+                        }
+                        if (ImGui::BeginDragDropSource())
+                        {
+                            ImGui::SetDragDropPayload("STUDY_NODE", &node.id, sizeof(int));
+                            ImGui::Text("Move: %s", node.title.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+                        if (ImGui::BeginPopupContextItem())
+                        {
+                            if (ImGui::MenuItem("Rename"))
+                            {
+                                g_rename_id = node.id;
+                                strncpy(g_rename_buf, node.title.c_str(), sizeof(g_rename_buf) - 1);
+                                g_rename_buf[sizeof(g_rename_buf) - 1] = '\0';
+                                ImGui::OpenPopup("Rename Study");
+                            }
+                            if (ImGui::MenuItem("Delete"))
+                            {
+                                flush_study();
+                                delete_study_node(node.id);
+                            }
+                            ImGui::EndPopup();
+                        }
+                    }
+                    ImGui::PopID();
+                }
+            };
+            render_node(-1);
+
+            if (g_studies.empty())
+                ImGui::TextDisabled("No studies yet. Right-click to create folders and studies.");
+
+            if (g_rename_id >= 0)
+            {
+                ImGui::OpenPopup("Rename Study");
+                if (ImGui::BeginPopupModal("Rename Study", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+                {
+                    int idx = find_study_by_id(g_studies, g_rename_id);
+                    if (idx >= 0)
+                    {
+                        ImGui::Text("Rename: %s", g_studies[idx].title.c_str());
+                        if (ImGui::InputText("Name", g_rename_buf, sizeof(g_rename_buf), ImGuiInputTextFlags_EnterReturnsTrue))
+                        {
+                            if (strlen(g_rename_buf) > 0)
+                                g_studies[idx].title = g_rename_buf;
+                            g_rename_id = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("OK"))
+                        {
+                            if (strlen(g_rename_buf) > 0)
+                                g_studies[idx].title = g_rename_buf;
+                            g_rename_id = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cancel"))
+                        {
+                            g_rename_id = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+                    }
+                    else
+                    {
+                        g_rename_id = -1;
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
+                }
+            }
+
+            ImGui::End();
+        }
+
+        // Study Editor
+        if (show_study_editor)
+        {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            ImGui::Begin("Study Editor", &show_study_editor);
+
+            if (study_edit_id >= 0)
+            {
+                int idx = find_study_by_id(g_studies, study_edit_id);
+                if (idx >= 0)
+                {
+                    ImGui::TextDisabled("Study: %s", g_studies[idx].title.c_str());
+                }
+                else
+                {
+                    study_edit_id = -1;
+                    study_edit_buf[0] = '\0';
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("No study selected. Click a study node in the Studies Explorer.");
+            }
+
+            ImGui::Separator();
+
+            static ImGuiInputTextFlags study_flags = ImGuiInputTextFlags_AllowTabInput;
+            ImGui::InputTextMultiline("##study", study_edit_buf, sizeof(study_edit_buf),
+                ImVec2(-FLT_MIN, -FLT_MIN), study_flags);
+
+            ImGui::End();
+        }
+
         // Bookmarks dialog
         if (show_bookmarks_dialog)
         {
@@ -2111,6 +2478,9 @@ int main(int, char**)
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("(error|warning|fatal)");
                 ImGui::TextDisabled("  Find any of these words");
+                ImGui::TextDisabled(" ");
+                ImGui::TextDisabled("(?=.*word1)(?=.*word2)(?=.*word3)");
+                ImGui::TextDisabled("  Match all words in any order:");
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("\\.\\w+$");
                 ImGui::TextDisabled("  Find file extensions");
@@ -2335,9 +2705,10 @@ int main(int, char**)
     glfwTerminate();
 
 
-    // Flush and save notes
+    // Flush and save notes and studies
     flush_note(note_book, note_chapter, note_verse, note_edit_buf);
-    save_data_file(g_data_path, g_data_entries);
+    flush_study();
+    save_data_file(g_data_path, g_data_entries, g_studies);
 
     // Store custom state
     {
@@ -2355,6 +2726,8 @@ int main(int, char**)
             fprintf(f, "[show_notes]\n%d\n", show_notes ? 1 : 0);
             fprintf(f, "[show_notes_explorer]\n%d\n", show_notes_explorer ? 1 : 0);
             fprintf(f, "[data_path]\n%s\n", g_data_path.c_str());
+            fprintf(f, "[show_studies_explorer]\n%d\n", show_studies_explorer ? 1 : 0);
+            fprintf(f, "[show_study_editor]\n%d\n", show_study_editor ? 1 : 0);
             fprintf(f, "[show_menu]\n%d\n", show_menu ? 1 : 0);
             fprintf(f, "[allow_undock]\n%d\n", allow_undock ? 1 : 0);
             fprintf(f, "[show_history]\n%d\n", show_history_dialog ? 1 : 0);
