@@ -2480,7 +2480,7 @@ int main(int, char**)
                 ImGui::TextDisabled("  Find any of these words");
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("(?=.*word1)(?=.*word2)(?=.*word3)");
-                ImGui::TextDisabled("Match all words in any order:");
+                ImGui::TextDisabled("  Match all words in any order:");
                 ImGui::TextDisabled(" ");
                 ImGui::TextDisabled("\\.\\w+$");
                 ImGui::TextDisabled("  Find file extensions");
