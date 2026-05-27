@@ -45,10 +45,19 @@ struct DataEntry {
     std::string modified;
 };
 
+struct StudyNode {
+    int id;
+    int parent_id; // -1 for root
+    std::string title;
+    std::string type; // "folder" or "study"
+    std::string content;
+    int sort_order;
+};
+
 std::vector<TestamentInfo> load_translation(const std::string& path);
 std::string exe_dir();
-std::vector<DataEntry> load_data_file(const std::string& path);
-void save_data_file(const std::string& path, const std::vector<DataEntry>& entries);
+std::vector<DataEntry> load_data_file(const std::string& path, std::vector<StudyNode>* studies = nullptr);
+void save_data_file(const std::string& path, const std::vector<DataEntry>& entries, const std::vector<StudyNode>& studies = {});
 void create_default_data_file(const std::string& path);
 std::string timestamp();
 
