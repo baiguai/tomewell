@@ -758,6 +758,299 @@ static void delete_study_node(int id)
         }
 }
 
+// Find/Replace state
+static bool show_find_replace = false;
+static char find_text[256] = "";
+static char replace_text[256] = "";
+static int find_cursor = 0;
+static int find_match_start = -1;
+static int find_match_end = -1;
+static int find_match_index = 0;
+static int find_match_count = 0;
+static bool find_show_replace = false;
+static int find_target = -1; // -1 none, 0 notes, 1 study
+static bool g_find_requested = false;
+static bool g_find_need_focus = false;
+static bool g_find_nav_requested = false;
+
+static void find_reset_state()
+{
+    find_cursor = 0;
+    find_match_start = -1;
+    find_match_end = -1;
+    find_match_index = 0;
+    find_match_count = 0;
+    g_find_nav_requested = false;
+}
+
+static int count_matches(const char* buffer, const char* find_str)
+{
+    if (!buffer || !find_str || !*find_str) return 0;
+    int count = 0;
+    int flen = (int)strlen(find_str);
+    const char* p = buffer;
+    while ((p = strstr(p, find_str)) != nullptr)
+    {
+        count++;
+        p += flen;
+    }
+    return count;
+}
+
+static void do_find_next(char* buffer)
+{
+    if (!find_text[0] || !buffer) { find_reset_state(); return; }
+    int buflen = (int)strlen(buffer);
+    int flen = (int)strlen(find_text);
+
+    // Search from current cursor position
+    const char* found = (find_cursor < buflen) ? strstr(buffer + find_cursor, find_text) : nullptr;
+
+    // If not found from cursor, wrap around
+    if (!found)
+        found = strstr(buffer, find_text);
+
+    if (!found)
+    {
+        find_match_start = -1;
+        find_match_end = -1;
+        find_match_count = 0;
+        find_match_index = 0;
+        return;
+    }
+
+    find_match_start = (int)(found - buffer);
+    find_match_end = find_match_start + flen;
+    find_cursor = find_match_end;
+    find_match_count = count_matches(buffer, find_text);
+
+    // Determine which match this is (0-based)
+    find_match_index = 0;
+    const char* p = buffer;
+    while (p < found)
+    {
+        p = strstr(p, find_text);
+        if (!p) break;
+        if (p >= found) break;
+        find_match_index++;
+        p += flen;
+    }
+}
+
+static void do_find_prev(char* buffer)
+{
+    if (!find_text[0] || !buffer) { find_reset_state(); return; }
+    int flen = (int)strlen(find_text);
+
+    find_match_count = count_matches(buffer, find_text);
+    if (find_match_count == 0)
+    {
+        find_match_start = -1;
+        find_match_end = -1;
+        find_match_index = 0;
+        return;
+    }
+
+    // Find the last occurrence before find_cursor - flen
+    int search_limit = (find_cursor - flen > 0) ? find_cursor - flen : 0;
+    int last_pos = -1;
+    const char* p = buffer;
+    while ((p = strstr(p, find_text)) != nullptr)
+    {
+        int pos = (int)(p - buffer);
+        if (pos >= search_limit) break;
+        last_pos = pos;
+        p += flen;
+    }
+
+    // If not found before cursor, wrap to end
+    if (last_pos < 0)
+    {
+        // Find the last occurrence overall
+        p = buffer;
+        while ((p = strstr(p, find_text)) != nullptr)
+        {
+            last_pos = (int)(p - buffer);
+            p += flen;
+        }
+    }
+
+    if (last_pos >= 0)
+    {
+        find_match_start = last_pos;
+        find_match_end = last_pos + flen;
+        find_cursor = find_match_start;
+
+        // Determine match index
+        find_match_index = 0;
+        p = buffer;
+        while (p < buffer + last_pos)
+        {
+            p = strstr(p, find_text);
+            if (!p) break;
+            if (p >= buffer + last_pos) break;
+            find_match_index++;
+            p += flen;
+        }
+    }
+}
+
+static void do_replace(char* buffer, int buffer_size)
+{
+    if (!buffer || find_match_start < 0 || find_match_end <= find_match_start) return;
+    if (!find_text[0]) return;
+
+    int flen = find_match_end - find_match_start;
+    int rlen = (int)strlen(replace_text);
+    int buflen = (int)strlen(buffer);
+    int delta = rlen - flen;
+
+    if (buflen + delta >= buffer_size) return; // would overflow
+
+    // Shift content after match
+    if (delta != 0)
+    {
+        memmove(buffer + find_match_end + delta, buffer + find_match_end, buflen - find_match_end + 1);
+    }
+    // Copy replace text
+    if (rlen > 0)
+        memcpy(buffer + find_match_start, replace_text, rlen);
+
+    // Position cursor after the replaced text for next search
+    find_cursor = find_match_start + rlen;
+    find_match_start = -1;
+    find_match_end = -1;
+}
+
+static void do_replace_all(char* buffer, int buffer_size)
+{
+    if (!buffer || !find_text[0]) return;
+    int flen = (int)strlen(find_text);
+    int rlen = (int)strlen(replace_text);
+
+    int pos = 0;
+    int buflen = (int)strlen(buffer);
+    int count = 0;
+
+    while (pos < buflen)
+    {
+        const char* found = strstr(buffer + pos, find_text);
+        if (!found) break;
+        int match_start = (int)(found - buffer);
+        int match_end = match_start + flen;
+        int delta = rlen - flen;
+
+        if (buflen + delta >= buffer_size) break;
+
+        if (delta != 0)
+        {
+            memmove(buffer + match_end + delta, buffer + match_end, buflen - match_end + 1);
+            buflen += delta;
+        }
+        if (rlen > 0)
+            memcpy(buffer + match_start, replace_text, rlen);
+
+        pos = match_start + rlen;
+        count++;
+    }
+
+    find_reset_state();
+}
+
+static int editor_callback(ImGuiInputTextCallbackData* data)
+{
+    int editor_id = (int)(intptr_t)data->UserData;
+    if (g_find_nav_requested && show_find_replace && find_target == editor_id)
+    {
+        if (find_match_start >= 0 && find_match_end > find_match_start)
+        {
+            data->CursorPos = find_match_end;
+            GImGui->InputTextState.SetSelection(find_match_start, find_match_end);
+        }
+        g_find_nav_requested = false;
+    }
+    return 0;
+}
+
+static void render_find_bar(char* buffer, int buffer_size, int target_id)
+{
+    if (!show_find_replace || find_target != target_id) return;
+
+    // Close on Escape
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        show_find_replace = false;
+        find_target = -1;
+        g_find_nav_requested = false;
+        return;
+    }
+
+    // Focus find input when bar opens
+    if (g_find_need_focus)
+    {
+        ImGui::SetKeyboardFocusHere();
+        g_find_need_focus = false;
+    }
+
+    // Find input row
+    ImGui::Text("Find:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200);
+    bool find_enter = ImGui::InputText("##findinput", find_text, sizeof(find_text),
+        ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    if (ImGui::Button("Find Next") || find_enter)
+    {
+        do_find_next(buffer);
+        g_find_nav_requested = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Find Prev"))
+    {
+        do_find_prev(buffer);
+        g_find_nav_requested = true;
+    }
+
+    if (find_text[0] != '\0')
+    {
+        ImGui::SameLine();
+        if (find_match_count > 0)
+            ImGui::Text("%d/%d", find_match_index + 1, find_match_count);
+        else
+            ImGui::Text("No matches");
+    }
+
+    // Toggle replace
+    ImGui::SameLine();
+    if (ImGui::SmallButton(find_show_replace ? "Replace \xe2\x96\xb2" : "Replace \xe2\x96\xbc"))
+        find_show_replace = !find_show_replace;
+
+    if (find_show_replace)
+    {
+        ImGui::Text("Rep: ");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(200);
+        bool rep_enter = ImGui::InputText("##repinput", replace_text, sizeof(replace_text),
+            ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        if (ImGui::Button("Replace") || rep_enter)
+        {
+            if (find_match_start >= 0)
+            {
+                do_replace(buffer, buffer_size);
+                do_find_next(buffer);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Replace All"))
+        {
+            do_replace_all(buffer, buffer_size);
+        }
+    }
+
+    ImGui::Separator();
+}
+
 // Main code
 int main(int, char**)
 {
@@ -1209,9 +1502,13 @@ int main(int, char**)
         {
             show_menu = !show_menu;
         }
-        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_F))
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_F))
         {
             show_search = !show_search;
+        }
+        if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && !ImGui::IsKeyDown(ImGuiMod_Shift) && ImGui::IsKeyPressed(ImGuiKey_F))
+        {
+            g_find_requested = true;
         }
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_H))
         {
@@ -1471,7 +1768,7 @@ int main(int, char**)
             }
             if (ImGui::BeginMenu("Search"))
             {
-                if (ImGui::MenuItem("Search Bible", "Ctrl+F"))
+                if (ImGui::MenuItem("Search Bible", "Ctrl+Shift+F"))
                 {
                     g_search_fired = false;
                     show_search = true;
@@ -1983,6 +2280,14 @@ int main(int, char**)
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Notes Editor", &show_notes);
             {
+                if (g_find_requested && ImGui::IsWindowFocused())
+                {
+                    g_find_requested = false;
+                    show_find_replace = !show_find_replace;
+                    if (show_find_replace) { find_target = 0; find_reset_state(); g_find_need_focus = true; }
+                    else find_target = -1;
+                }
+
                 ImGui::TextDisabled("%s", g_data_path.c_str());
 
                 const char* bn = book_name(tree_data, note_book);
@@ -1993,9 +2298,13 @@ int main(int, char**)
 
                 ImGui::Separator();
 
+                render_find_bar(note_edit_buf, (int)sizeof(note_edit_buf), 0);
+
                 static ImGuiInputTextFlags notes_flags = ImGuiInputTextFlags_AllowTabInput;
                 ImGui::InputTextMultiline("##note", note_edit_buf, sizeof(note_edit_buf),
-                    ImVec2(-FLT_MIN, -FLT_MIN), notes_flags);
+                    ImVec2(-FLT_MIN, -FLT_MIN),
+                    notes_flags | ImGuiInputTextFlags_CallbackAlways,
+                    editor_callback, (void*)(intptr_t)0);
             }
             ImGui::End();
         }
@@ -2269,6 +2578,8 @@ int main(int, char**)
                     if (idx >= 0)
                     {
                         ImGui::Text("Rename: %s", g_studies[idx].title.c_str());
+                        if (ImGui::IsWindowAppearing())
+                            ImGui::SetKeyboardFocusHere();
                         if (ImGui::InputText("Name", g_rename_buf, sizeof(g_rename_buf), ImGuiInputTextFlags_EnterReturnsTrue))
                         {
                             if (strlen(g_rename_buf) > 0)
@@ -2308,6 +2619,13 @@ int main(int, char**)
         {
             ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
             ImGui::Begin("Study Editor", &show_study_editor);
+            if (g_find_requested && ImGui::IsWindowFocused())
+            {
+                g_find_requested = false;
+                show_find_replace = !show_find_replace;
+                if (show_find_replace) { find_target = 1; find_reset_state(); g_find_need_focus = true; }
+                else find_target = -1;
+            }
 
             if (study_edit_id >= 0)
             {
@@ -2329,9 +2647,13 @@ int main(int, char**)
 
             ImGui::Separator();
 
+            render_find_bar(study_edit_buf, (int)sizeof(study_edit_buf), 1);
+
             static ImGuiInputTextFlags study_flags = ImGuiInputTextFlags_AllowTabInput;
             ImGui::InputTextMultiline("##study", study_edit_buf, sizeof(study_edit_buf),
-                ImVec2(-FLT_MIN, -FLT_MIN), study_flags);
+                ImVec2(-FLT_MIN, -FLT_MIN),
+                study_flags | ImGuiInputTextFlags_CallbackAlways,
+                editor_callback, (void*)(intptr_t)1);
 
             ImGui::End();
         }
@@ -2670,6 +2992,9 @@ int main(int, char**)
 
             ImGui::End();
         }
+
+        // Clear find request if no editor consumed it
+        g_find_requested = false;
 
         // Rendering
         ImGui::Render();
