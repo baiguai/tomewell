@@ -770,6 +770,8 @@ static int find_match_count = 0;
 static bool find_show_replace = false;
 static int find_target = -1; // -1 none, 0 notes, 1 study
 static bool g_find_requested = false;
+static bool g_find_need_focus = false;
+static bool g_find_nav_requested = false;
 
 static void find_reset_state()
 {
@@ -778,6 +780,7 @@ static void find_reset_state()
     find_match_end = -1;
     find_match_index = 0;
     find_match_count = 0;
+    g_find_nav_requested = false;
 }
 
 static int count_matches(const char* buffer, const char* find_str)
@@ -954,6 +957,21 @@ static void do_replace_all(char* buffer, int buffer_size)
     find_reset_state();
 }
 
+static int editor_callback(ImGuiInputTextCallbackData* data)
+{
+    int editor_id = (int)(intptr_t)data->UserData;
+    if (g_find_nav_requested && show_find_replace && find_target == editor_id)
+    {
+        if (find_match_start >= 0 && find_match_end > find_match_start)
+        {
+            data->CursorPos = find_match_end;
+            GImGui->InputTextState.SetSelection(find_match_start, find_match_end);
+        }
+        g_find_nav_requested = false;
+    }
+    return 0;
+}
+
 static void render_find_bar(char* buffer, int buffer_size, int target_id)
 {
     if (!show_find_replace || find_target != target_id) return;
@@ -963,7 +981,15 @@ static void render_find_bar(char* buffer, int buffer_size, int target_id)
     {
         show_find_replace = false;
         find_target = -1;
+        g_find_nav_requested = false;
         return;
+    }
+
+    // Focus find input when bar opens
+    if (g_find_need_focus)
+    {
+        ImGui::SetKeyboardFocusHere();
+        g_find_need_focus = false;
     }
 
     // Find input row
@@ -976,11 +1002,13 @@ static void render_find_bar(char* buffer, int buffer_size, int target_id)
     if (ImGui::Button("Find Next") || find_enter)
     {
         do_find_next(buffer);
+        g_find_nav_requested = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Find Prev"))
     {
         do_find_prev(buffer);
+        g_find_nav_requested = true;
     }
 
     if (find_text[0] != '\0')
@@ -2256,7 +2284,7 @@ int main(int, char**)
                 {
                     g_find_requested = false;
                     show_find_replace = !show_find_replace;
-                    if (show_find_replace) { find_target = 0; find_reset_state(); }
+                    if (show_find_replace) { find_target = 0; find_reset_state(); g_find_need_focus = true; }
                     else find_target = -1;
                 }
 
@@ -2274,7 +2302,9 @@ int main(int, char**)
 
                 static ImGuiInputTextFlags notes_flags = ImGuiInputTextFlags_AllowTabInput;
                 ImGui::InputTextMultiline("##note", note_edit_buf, sizeof(note_edit_buf),
-                    ImVec2(-FLT_MIN, -FLT_MIN), notes_flags);
+                    ImVec2(-FLT_MIN, -FLT_MIN),
+                    notes_flags | ImGuiInputTextFlags_CallbackAlways,
+                    editor_callback, (void*)(intptr_t)0);
             }
             ImGui::End();
         }
@@ -2548,6 +2578,8 @@ int main(int, char**)
                     if (idx >= 0)
                     {
                         ImGui::Text("Rename: %s", g_studies[idx].title.c_str());
+                        if (ImGui::IsWindowAppearing())
+                            ImGui::SetKeyboardFocusHere();
                         if (ImGui::InputText("Name", g_rename_buf, sizeof(g_rename_buf), ImGuiInputTextFlags_EnterReturnsTrue))
                         {
                             if (strlen(g_rename_buf) > 0)
@@ -2591,7 +2623,7 @@ int main(int, char**)
             {
                 g_find_requested = false;
                 show_find_replace = !show_find_replace;
-                if (show_find_replace) { find_target = 1; find_reset_state(); }
+                if (show_find_replace) { find_target = 1; find_reset_state(); g_find_need_focus = true; }
                 else find_target = -1;
             }
 
@@ -2619,7 +2651,9 @@ int main(int, char**)
 
             static ImGuiInputTextFlags study_flags = ImGuiInputTextFlags_AllowTabInput;
             ImGui::InputTextMultiline("##study", study_edit_buf, sizeof(study_edit_buf),
-                ImVec2(-FLT_MIN, -FLT_MIN), study_flags);
+                ImVec2(-FLT_MIN, -FLT_MIN),
+                study_flags | ImGuiInputTextFlags_CallbackAlways,
+                editor_callback, (void*)(intptr_t)1);
 
             ImGui::End();
         }
